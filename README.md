@@ -1,0 +1,334 @@
+# Agent-Q
+
+**AI-powered agentic extension for Common Lisp development**
+
+Agent-Q is an intelligent assistant that integrates with SLY/Emacs to provide context-aware help with Common Lisp development. It can understand your code, answer questions, generate documentation, suggest fixes, and act as an autonomous development partner.
+
+## Features (Phase 1)
+
+- 🧠 **Context-aware assistance** - Accumulate code snippets from your buffers for targeted help
+- 💬 **Conversational interface** - Multi-turn conversations with full history
+- 🔧 **SLY integration** - Seamless integration with your existing Lisp workflow
+- 🎨 **Multiple providers** - Support for Anthropic, OpenAI, Ollama, and OpenRouter
+- ⚡ **Quick actions** - Document functions, explain code, debug errors with a keystroke
+
+## Prerequisites
+
+- **Emacs** with **SLY** installed
+- **Common Lisp** implementation (SBCL, CCL, etc.)
+- **Quicklisp** for package management
+- **cl-llm-provider** library
+- **API key** for your chosen LLM provider (Anthropic, OpenAI, etc.)
+
+## Installation
+
+### 1. Install cl-llm-provider
+
+```lisp
+(ql:quickload "cl-llm-provider")
+```
+
+### 2. Clone Agent-Q
+
+```bash
+cd ~/quicklisp/local-projects
+git clone https://github.com/yourusername/agent-q.git
+```
+
+### 3. Load Agent-Q in Common Lisp
+
+```lisp
+(ql:quickload "agent-q")
+```
+
+### 4. Set up Emacs integration
+
+Add to your Emacs init file (e.g., `~/.emacs` or `~/.emacs.d/init.el`):
+
+```elisp
+(with-eval-after-load 'sly
+  (add-to-list 'load-path "~/quicklisp/local-projects/agent-q/contrib/sly-agent-q/")
+  (require 'sly-agent-q)
+  (sly-agent-q-setup))
+```
+
+Restart Emacs or evaluate the above code.
+
+## Configuration
+
+### API Key Setup
+
+Agent-Q uses environment variables for API keys. Set the appropriate variable for your provider:
+
+**For Anthropic (Claude):**
+```bash
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+**For OpenAI:**
+```bash
+export OPENAI_API_KEY="sk-..."
+```
+
+**For Ollama (local, no key needed):**
+```bash
+# No API key required for local Ollama
+```
+
+Add these to your shell configuration file (`~/.bashrc`, `~/.zshrc`, etc.) to make them permanent.
+
+### Optional: Config File
+
+Create `~/.config/agent-q/config.lisp` for custom settings:
+
+```lisp
+(in-package :agent-q)
+
+;; Configure provider and model
+(configure :provider :anthropic
+           :model "claude-sonnet-4-20250514")
+
+;; Or use OpenAI
+;; (configure :provider :openai
+;;            :model "gpt-4-turbo")
+
+;; Or use Ollama (local)
+;; (configure :provider :ollama
+;;            :model "llama2"
+;;            :base-url "http://localhost:11434")
+```
+
+### Optional: Project-Specific Prompts
+
+Create `.agent-q/system-prompt.md` in your project root to add custom instructions:
+
+```markdown
+This project uses a custom macro system for DSL generation.
+Prefer using `define-dsl-element` over manual defmacro.
+Follow the naming convention: operation-noun (e.g., parse-expression, emit-code).
+```
+
+Agent-Q will automatically include these instructions when working in that project.
+
+## Usage
+
+### Basic Workflow
+
+1. **Start SLY** and connect to your Lisp image
+2. **Enable Agent-Q** mode (automatic if you added setup to init file)
+3. **Add context** - Mark code regions you want the agent to know about
+4. **Ask questions** - Send messages to get help
+5. **Insert responses** - Paste agent suggestions into your code
+
+### Keybindings
+
+All Agent-Q commands are under the `C-c q` prefix:
+
+#### Context Management
+- `C-c q c r` - Add region to context
+- `C-c q c b` - Add entire buffer to context
+- `C-c q c d` - Add current defun to context
+- `C-c q c c` - Clear all context
+- `C-c q c s` - Show context summary
+
+#### Conversation
+- `C-c q s` - Send message to agent
+- `C-c q S` - Send message with context (capital S)
+- `C-c q r` - Send region with custom instruction
+- `C-c q n` - Start new conversation
+- `C-c q v` - View conversation buffer
+
+#### Response Handling
+- `C-c q i` - Insert last response at point
+- `C-c q w` - Copy last response to kill ring
+
+#### Quick Actions
+- `C-c q q d` - Document current defun
+- `C-c q q e` - Explain selected region
+- `C-c q q f` - Help fix recent error
+
+### Example Session
+
+```elisp
+;; 1. Write some code
+(defun fibonacci (n)
+  (if (<= n 1)
+      n
+      (+ (fibonacci (- n 1))
+         (fibonacci (- n 2)))))
+
+;; 2. Mark the defun and add to context
+;; M-x sly-agent-q-add-defun-to-context (or C-c q c d)
+
+;; 3. Ask the agent to optimize it
+;; M-x sly-agent-q-send-with-context: "Make this tail-recursive"
+;; (or C-c q S)
+
+;; 4. Agent responds with optimized version
+;; Use C-c q i to insert at point
+```
+
+## API Reference (Common Lisp)
+
+### Configuration
+
+```lisp
+;; Configure provider
+(agent-q:configure :provider :anthropic
+                   :model "claude-sonnet-4-20250514"
+                   :api-key "sk-ant-...")  ; optional, reads from env
+
+;; Check configuration
+agent-q:*default-provider*    ; => :anthropic
+agent-q:*default-model*       ; => "claude-sonnet-4-20250514"
+agent-q:*provider-instance*   ; => #<CL-LLM-PROVIDER:PROVIDER>
+```
+
+### Context Management
+
+```lisp
+;; Add context programmatically
+(agent-q:agent-q-add-context "(defun foo () ...)"
+                             :type :code
+                             :metadata '(:filename "example.lisp"
+                                        :start-line 10
+                                        :end-line 15))
+
+;; Clear context
+(agent-q:agent-q-clear-context)
+
+;; Get context summary
+(agent-q:agent-q-get-context-summary)
+;; => (:count 3 :types (:code :code :error) :preview "3 items: Code, Code, Error")
+```
+
+### Sending Messages
+
+```lisp
+;; Send without context
+(agent-q:agent-q-send "What's the best way to handle errors in CL?")
+
+;; Send with context
+(agent-q:agent-q-send "Optimize this function" :include-context t)
+
+;; Start new conversation
+(agent-q:agent-q-new-conversation :project "my-app")
+```
+
+## Troubleshooting
+
+### "Authentication failed" error
+
+- Check that your API key is set correctly in the environment
+- Verify the key is valid by testing it with curl or the provider's CLI
+- Restart your Lisp image after setting environment variables
+
+### "Rate limited" error
+
+- You've exceeded your API rate limit
+- Wait a few minutes and try again
+- Consider using a local model with Ollama for development
+
+### "Provider not found" error
+
+- Make sure cl-llm-provider is loaded: `(ql:quickload "cl-llm-provider")`
+- Check that you're using a supported provider: `:anthropic`, `:openai`, `:ollama`, `:openrouter`
+
+### Emacs can't find sly-agent-q
+
+- Verify the path in your init file matches where you cloned agent-q
+- Make sure you've evaluated the configuration or restarted Emacs
+- Check for errors in `*Messages*` buffer
+
+### "No agent initialized" message
+
+- The agent initializes automatically on first use
+- Try calling `(agent-q:agent-q-configure)` from the REPL
+- Check that `agent-q:*provider-instance*` is not nil
+
+## Architecture
+
+Agent-Q is organized into four planned phases:
+
+- **Phase 1 (Current)**: Foundation - Context management, LLM integration, basic Emacs UI
+- **Phase 2**: REPL-aware - Tool system for introspection and code execution
+- **Phase 3**: Autonomous - Condition system integration, testing, knowledge persistence
+- **Phase 4**: Intelligent - Semantic indexing, profiling, refactoring, pattern detection
+
+See `specs/` directory for detailed specifications of each phase.
+
+## Development
+
+### Running Tests
+
+```lisp
+;; Load the system
+(ql:quickload "agent-q")
+
+;; Manual tests
+(in-package :agent-q)
+
+;; Test context accumulation
+(let ((mgr (make-instance 'context-manager)))
+  (add-context mgr "(defun test () ...)")
+  (add-context mgr "(defun test2 () ...)")
+  (context-to-string mgr))
+
+;; Test conversation
+(let ((conv (new-conversation)))
+  (add-message conv :user "Hello")
+  (get-messages conv))
+
+;; Test LLM integration (requires API key)
+(agent-q-send "What is the purpose of CLOS?")
+```
+
+### Project Structure
+
+```
+agent-q/
+├── agent-q.asd                    # ASDF system definition
+├── src/                           # Common Lisp source
+│   ├── package.lisp
+│   ├── config.lisp
+│   ├── context.lisp
+│   ├── conversation.lisp
+│   ├── prompts.lisp
+│   ├── agent.lisp
+│   └── sly-interface.lisp
+├── contrib/
+│   └── sly-agent-q/
+│       └── sly-agent-q.el         # Emacs integration
+├── specs/                         # Design specifications
+└── README.md
+```
+
+## Contributing
+
+Contributions are welcome! Please:
+
+1. Check existing issues or create a new one
+2. Fork the repository
+3. Create a feature branch
+4. Make your changes with tests
+5. Submit a pull request
+
+## License
+
+MIT License - see LICENSE file for details
+
+## Acknowledgments
+
+- Built on [cl-llm-provider](https://github.com/user/cl-llm-provider) for LLM integration
+- Inspired by AI-powered development tools and the Common Lisp community
+- Uses [SLY](https://github.com/joaotavora/sly) for Emacs integration
+
+## Links
+
+- Documentation: See `specs/` directory
+- Issues: https://github.com/yourusername/agent-q/issues
+- cl-llm-provider: https://github.com/user/cl-llm-provider
+
+---
+
+**Status**: Phase 1 (Foundation) - Active Development
