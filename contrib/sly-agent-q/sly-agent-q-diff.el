@@ -1,7 +1,7 @@
 ;;; sly-agent-q-diff.el --- Diff view for Agent-Q file edits -*- lexical-binding: t; -*-
 
 ;; Author: Abhijit Rao <quasi@quasilabs.in>
-;; Version: 0.2.0
+;; Version: 0.3.0
 ;; Package-Requires: ((emacs "27.1") (sly "1.0.0"))
 ;; Keywords: lisp, ai, tools
 ;; URL: https://github.com/quasilabs/agent-q

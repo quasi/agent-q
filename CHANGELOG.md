@@ -5,6 +5,40 @@ All notable changes to Agent-Q will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.0] - 2026-01-07
+
+### Added
+
+- **Per-hunk diff approval**: Review and apply changes granularly instead of all-or-nothing
+  - `a` key to accept individual hunk
+  - `r` key to reject individual hunk
+  - `n`/`p` to navigate between hunks
+  - `SPC` to toggle hunk state
+  - `RET` to preview source location
+  - `?` to show help overlay
+  - Real-time progress display in header
+  - Visual feedback with color-coded overlays (green=applied, red=rejected)
+- Comprehensive ERT test suite for diff functionality
+- Integration tests for multi-hunk workflows
+- Manual testing checklist
+- Detailed diff review guide documentation
+
+### Changed
+
+- Replaced fragile string-matching diff application with `diff-mode.el` infrastructure
+- Accept/reject commands now use built-in `diff-apply-hunk` and `diff-apply-buffer`
+- Improved robustness for whitespace variations and context changes
+
+### Deprecated
+
+- None (backward compatible - `C-c C-c` / `C-c C-k` still work)
+
+### Fixed
+
+- Edge cases with whitespace mismatches in diffs
+- Off-by-one errors in manual position calculation
+- Context shift handling when nearby code changes
+
 ## [0.1.5] - 2025-12-31
 
 ### Added
