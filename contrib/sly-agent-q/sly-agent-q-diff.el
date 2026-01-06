@@ -171,56 +171,35 @@ Returns the diff as a string."
 ;;; Interactive commands
 
 (defun sly-agent-q-diff-accept ()
-  "Accept the proposed changes and apply them to the buffer."
+  "Accept the proposed changes and apply them using diff-mode infrastructure."
   (interactive)
   (unless (derived-mode-p 'sly-agent-q-diff-mode)
     (user-error "Not in Agent-Q diff buffer"))
 
-  (let ((path sly-agent-q-diff--path)
-        (original sly-agent-q-diff--original)
-        (modified sly-agent-q-diff--modified))
+  (let ((path sly-agent-q-diff--path))
+    (unless path
+      (user-error "Missing file path - cannot apply changes"))
 
-    ;; Validate we have the necessary data
-    (unless (and path original modified)
-      (user-error "Missing diff data - cannot apply changes"))
+    ;; Ensure target file exists and is visited
+    (unless (file-exists-p path)
+      (user-error "File does not exist: %s" path))
 
-    ;; Find or create buffer visiting the file
-    (let ((file-buffer (or (find-buffer-visiting path)
-                          (find-file-noselect path))))
+    (let ((file-buffer (find-file-noselect path)))
+      ;; Apply all hunks in diff buffer using built-in diff-apply-buffer
+      (condition-case err
+          (progn
+            (diff-apply-buffer)  ; Built-in function from diff-mode.el
+            (message "✓ All changes applied to %s. Save when ready." path))
+        (error
+         (message "✗ Error applying diff: %s" (error-message-string err))
+         (user-error "Failed to apply changes: %s" (error-message-string err))))))
 
-      (with-current-buffer file-buffer
-        (let ((current-content (buffer-substring-no-properties (point-min) (point-max))))
-          ;; Check if this is a partial edit (original is smaller than file)
-          (if (< (length original) (length current-content))
-              ;; Partial edit: find and replace the original content
-              (let ((start-pos (string-match (regexp-quote original) current-content)))
-                (if start-pos
-                    (progn
-                      ;; Found the original content - replace it
-                      (let ((end-pos (+ start-pos (length original))))
-                        (goto-char (1+ start-pos))  ; Convert 0-based to 1-based
-                        (delete-region (1+ start-pos) (1+ end-pos))
-                        (insert modified)
-                        (message "✓ Changes applied to %s (partial update). Save when ready." path)))
-                  ;; Original not found in file
-                  (user-error "Cannot find original content in file. File may have changed.")))
-            ;; Full file replacement
-            (unless (string= current-content original)
-              (unless (yes-or-no-p
-                      (format "Warning: File content differs.\nExpected %d chars, found %d chars.\nReplace entire file? "
-                              (length original) (length current-content)))
-                (user-error "Changes not applied")))
-            ;; Replace entire file
-            (erase-buffer)
-            (insert modified)
-            (message "✓ Changes applied to %s (full file). Save when ready." path)))))
-
-    ;; Set decision, exit recursive edit, and close the diff buffer
-    (setq sly-agent-q-diff--decision 'accepted)
-    (let ((diff-buf (current-buffer)))
-      (exit-recursive-edit)
-      (when (buffer-live-p diff-buf)
-        (kill-buffer diff-buf)))))
+  ;; Set decision, exit recursive edit, and close the diff buffer
+  (setq sly-agent-q-diff--decision 'accepted)
+  (let ((diff-buf (current-buffer)))
+    (exit-recursive-edit)
+    (when (buffer-live-p diff-buf)
+      (kill-buffer diff-buf))))
 
 (defun sly-agent-q-diff-reject ()
   "Reject the proposed changes."
