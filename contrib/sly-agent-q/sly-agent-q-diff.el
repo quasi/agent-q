@@ -42,6 +42,16 @@
   "Face for keybinding hints."
   :group 'sly-agent-q-diff)
 
+(defface sly-agent-q-diff-applied-face
+  '((t :background "#2d4f2d" :extend t))
+  "Face for applied hunks."
+  :group 'sly-agent-q-diff)
+
+(defface sly-agent-q-diff-rejected-face
+  '((t :background "#4f2d2d" :extend t))
+  "Face for rejected hunks."
+  :group 'sly-agent-q-diff)
+
 ;;; Buffer-local state
 
 (defvar-local sly-agent-q-diff--path nil
@@ -75,6 +85,38 @@ STATE: 'pending | 'accepted | 'rejected | 'applied")
       (while (re-search-forward "^@@" nil t)
         (cl-incf count))
       count)))
+
+(defun sly-agent-q-diff--hunk-end ()
+  "Return end position of current hunk."
+  (save-excursion
+    (diff-end-of-hunk)
+    (point)))
+
+(defun sly-agent-q-diff--mark-hunk-applied (hunk-start)
+  "Add overlay marking HUNK-START as applied."
+  (let* ((hunk-end (save-excursion
+                    (goto-char hunk-start)
+                    (sly-agent-q-diff--hunk-end)))
+         (ov (make-overlay hunk-start hunk-end)))
+    (overlay-put ov 'face 'sly-agent-q-diff-applied-face)
+    (overlay-put ov 'sly-agent-q-hunk-state 'applied)
+    (overlay-put ov 'before-string
+                 (propertize "[APPLIED] " 'face '(:foreground "#00ff00" :weight bold)))))
+
+(defun sly-agent-q-diff--mark-hunk-rejected (hunk-start)
+  "Add overlay marking HUNK-START as rejected."
+  (let* ((hunk-end (save-excursion
+                    (goto-char hunk-start)
+                    (sly-agent-q-diff--hunk-end)))
+         (ov (make-overlay hunk-start hunk-end)))
+    (overlay-put ov 'face 'sly-agent-q-diff-rejected-face)
+    (overlay-put ov 'sly-agent-q-hunk-state 'rejected)
+    (overlay-put ov 'before-string
+                 (propertize "[REJECTED] " 'face '(:foreground "#ff6666" :weight bold)))))
+
+(defun sly-agent-q-diff--clear-hunk-overlays ()
+  "Remove all hunk state overlays from buffer."
+  (remove-overlays (point-min) (point-max) 'sly-agent-q-hunk-state))
 
 ;;; Major mode
 
@@ -281,6 +323,8 @@ Returns the diff as a string."
             ;; Mark as applied
             (setf (alist-get hunk-start sly-agent-q-diff--hunk-states)
                   'applied)
+            ;; Visual feedback
+            (sly-agent-q-diff--mark-hunk-applied hunk-start)
             (message "✓ Hunk applied"))
         (error
          (message "✗ Failed to apply hunk: %s" (error-message-string err))
@@ -303,6 +347,8 @@ Returns the diff as a string."
     (let ((hunk-start (point)))
       (setf (alist-get hunk-start sly-agent-q-diff--hunk-states)
             'rejected)
+      ;; Visual feedback
+      (sly-agent-q-diff--mark-hunk-rejected hunk-start)
       (message "✗ Hunk rejected")))
 
   ;; Move to next hunk
