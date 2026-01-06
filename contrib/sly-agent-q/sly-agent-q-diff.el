@@ -194,7 +194,8 @@ Returns the diff as a string."
   (unless (derived-mode-p 'sly-agent-q-diff-mode)
     (user-error "Not in Agent-Q diff buffer"))
 
-  (let ((path sly-agent-q-diff--path))
+  (let ((path sly-agent-q-diff--path)
+        (diff-buf (current-buffer)))
     (unless path
       (user-error "Missing file path - cannot apply changes"))
 
@@ -203,21 +204,27 @@ Returns the diff as a string."
       (user-error "File does not exist: %s" path))
 
     (let ((file-buffer (find-file-noselect path)))
-      ;; Apply all hunks in diff buffer using built-in diff-apply-buffer
+      ;; Apply all hunks in diff buffer using built-in diff-apply-hunk
+      ;; We apply hunks one by one to avoid auto-save behavior of diff-apply-buffer
       (condition-case err
           (progn
-            (diff-apply-buffer)  ; Built-in function from diff-mode.el
-            (message "✓ All changes applied to %s. Save when ready." path))
+            (goto-char (point-min))
+            (let ((applied 0))
+              (while (re-search-forward "^@@" nil t)
+                (beginning-of-line)
+                (diff-apply-hunk)
+                (cl-incf applied))
+              (message "✓ %d hunk(s) applied to %s. Save when ready." applied path)))
         (error
          (message "✗ Error applying diff: %s" (error-message-string err))
-         (user-error "Failed to apply changes: %s" (error-message-string err))))))
+         (user-error "Failed to apply changes: %s" (error-message-string err)))))
 
-  ;; Set decision, exit recursive edit, and close the diff buffer
-  (setq sly-agent-q-diff--decision 'accepted)
-  (let ((diff-buf (current-buffer)))
-    (exit-recursive-edit)
+    ;; Set decision and close diff buffer BEFORE exit-recursive-edit
+    ;; (exit-recursive-edit unwinds the stack, so code after it won't run)
+    (setq sly-agent-q-diff--decision 'accepted)
     (when (buffer-live-p diff-buf)
-      (kill-buffer diff-buf))))
+      (kill-buffer diff-buf))
+    (exit-recursive-edit)))
 
 (defun sly-agent-q-diff-reject ()
   "Reject the proposed changes."
