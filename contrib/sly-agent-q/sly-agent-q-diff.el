@@ -140,7 +140,7 @@ STATE: 'pending | 'accepted | 'rejected | 'applied")
 
 \\{sly-agent-q-diff-mode-map}"
   :group 'sly-agent-q-diff
-  (setq buffer-read-only t)
+  ;; Don't set buffer-read-only - diff-mode needs to modify buffer properties
   (setq truncate-lines nil))
 
 ;;; Core functionality
@@ -153,14 +153,16 @@ MODIFIED is the proposed new content.
 DESCRIPTION explains what changed and why.
 
 Returns 'accepted if user accepts, 'rejected otherwise."
-  (let ((diff-buffer (get-buffer-create "*Agent-Q Diff*")))
+  ;; Expand path to absolute (LLM may provide relative path)
+  (let* ((abs-path (expand-file-name path))
+         (diff-buffer (get-buffer-create "*Agent-Q Diff*")))
     (with-current-buffer diff-buffer
       (let ((inhibit-read-only t))
         (erase-buffer)
         (sly-agent-q-diff-mode)
 
-        ;; Store state
-        (setq sly-agent-q-diff--path path
+        ;; Store state (use absolute path)
+        (setq sly-agent-q-diff--path abs-path
               sly-agent-q-diff--original original
               sly-agent-q-diff--modified modified
               sly-agent-q-diff--description description
