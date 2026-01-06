@@ -85,5 +85,63 @@
     (sly-agent-q-diff-mode)
     (should (null sly-agent-q-diff--hunk-states))))
 
+(ert-deftest sly-agent-q-diff-test-accept-single-hunk ()
+  "Accepting single hunk should apply it and mark as 'applied."
+  (let* ((test-file (make-temp-file "agent-q-test-" nil ".lisp"))
+         (diff-text (concat "--- " test-file "\n"
+                           "+++ " test-file "\n"
+                           "@@ -1,1 +1,2 @@\n"
+                           " line1\n"
+                           "+line2\n")))
+    (unwind-protect
+        (progn
+          (with-temp-file test-file
+            (insert "line1\n"))
+
+          (with-temp-buffer
+            (insert diff-text)
+            (sly-agent-q-diff-mode)
+            (setq sly-agent-q-diff--path test-file)
+            (goto-char (point-min))
+            (re-search-forward "^@@")
+            (beginning-of-line)
+
+            (let ((hunk-start (point)))
+              (sly-agent-q-diff-accept-hunk)
+
+              ;; Check state was recorded
+              (should (eq 'applied (alist-get hunk-start sly-agent-q-diff--hunk-states)))
+
+              ;; Check file buffer was modified
+              (let ((file-buffer (find-buffer-visiting test-file)))
+                (should file-buffer)
+                (with-current-buffer file-buffer
+                  (should (string-match-p "line2" (buffer-string)))
+                  (set-buffer-modified-p nil))))))
+
+      (when (file-exists-p test-file)
+        (delete-file test-file))
+      (let ((buf (find-buffer-visiting test-file)))
+        (when buf (kill-buffer buf))))))
+
+(ert-deftest sly-agent-q-diff-test-reject-single-hunk ()
+  "Rejecting single hunk should mark it as 'rejected without applying."
+  (with-temp-buffer
+    (insert "--- a/test.lisp\n"
+            "+++ b/test.lisp\n"
+            "@@ -1,1 +1,2 @@\n"
+            " line1\n"
+            "+line2\n")
+    (sly-agent-q-diff-mode)
+    (goto-char (point-min))
+    (re-search-forward "^@@")
+    (beginning-of-line)
+
+    (let ((hunk-start (point)))
+      (sly-agent-q-diff-reject-hunk)
+
+      ;; Check state was recorded
+      (should (eq 'rejected (alist-get hunk-start sly-agent-q-diff--hunk-states))))))
+
 (provide 'sly-agent-q-diff-test)
 ;;; sly-agent-q-diff-test.el ends here

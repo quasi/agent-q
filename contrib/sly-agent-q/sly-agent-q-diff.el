@@ -80,9 +80,16 @@ STATE: 'pending | 'accepted | 'rejected | 'applied")
 
 (defvar sly-agent-q-diff-mode-map
   (let ((map (make-sparse-keymap)))
+    ;; All-or-nothing (backward compatible)
     (define-key map (kbd "C-c C-c") #'sly-agent-q-diff-accept)
     (define-key map (kbd "C-c C-k") #'sly-agent-q-diff-reject)
-    (define-key map (kbd "q") #'sly-agent-q-diff-reject)
+
+    ;; Per-hunk approval (new)
+    (define-key map (kbd "a") #'sly-agent-q-diff-accept-hunk)
+    (define-key map (kbd "r") #'sly-agent-q-diff-reject-hunk)
+    (define-key map (kbd "n") #'diff-hunk-next)
+    (define-key map (kbd "p") #'diff-hunk-prev)
+    (define-key map (kbd "q") #'sly-agent-q-diff-finish)
     map)
   "Keymap for `sly-agent-q-diff-mode'.")
 
@@ -255,6 +262,53 @@ Returns the diff as a string."
   (message "✗ Changes rejected")
   ;; Don't kill buffer here - sly-agent-q-show-diff-and-wait needs to read the decision
   (exit-recursive-edit))
+
+;;; Per-hunk commands
+
+(defun sly-agent-q-diff-accept-hunk ()
+  "Accept and apply the current hunk."
+  (interactive)
+  (unless (derived-mode-p 'sly-agent-q-diff-mode)
+    (user-error "Not in Agent-Q diff buffer"))
+
+  (save-excursion
+    (diff-beginning-of-hunk)
+    (let ((hunk-start (point)))
+      ;; Apply using built-in diff-mode function
+      (condition-case err
+          (progn
+            (diff-apply-hunk)
+            ;; Mark as applied
+            (setf (alist-get hunk-start sly-agent-q-diff--hunk-states)
+                  'applied)
+            (message "✓ Hunk applied"))
+        (error
+         (message "✗ Failed to apply hunk: %s" (error-message-string err))
+         (setf (alist-get hunk-start sly-agent-q-diff--hunk-states)
+               'error)))))
+
+  ;; Move to next hunk
+  (condition-case nil
+      (diff-hunk-next)
+    (error nil)))  ; No more hunks
+
+(defun sly-agent-q-diff-reject-hunk ()
+  "Reject the current hunk (mark as skipped)."
+  (interactive)
+  (unless (derived-mode-p 'sly-agent-q-diff-mode)
+    (user-error "Not in Agent-Q diff buffer"))
+
+  (save-excursion
+    (diff-beginning-of-hunk)
+    (let ((hunk-start (point)))
+      (setf (alist-get hunk-start sly-agent-q-diff--hunk-states)
+            'rejected)
+      (message "✗ Hunk rejected")))
+
+  ;; Move to next hunk
+  (condition-case nil
+      (diff-hunk-next)
+    (error nil)))
 
 (provide 'sly-agent-q-diff)
 ;;; sly-agent-q-diff.el ends here
