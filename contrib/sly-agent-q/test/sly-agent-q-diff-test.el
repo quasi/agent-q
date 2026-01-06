@@ -61,5 +61,29 @@
       (let ((buf (find-buffer-visiting test-file)))
         (when buf (kill-buffer buf))))))
 
+(ert-deftest sly-agent-q-diff-test-count-hunks ()
+  "Should correctly count hunks in multi-hunk diff."
+  (with-temp-buffer
+    (insert "--- a/test.lisp\n"
+            "+++ b/test.lisp\n"
+            "@@ -1,2 +1,3 @@\n"
+            " line1\n"
+            "+line2\n"
+            " line3\n"
+            "@@ -10,1 +11,2 @@\n"
+            " line10\n"
+            "+line11\n"
+            "@@ -20,1 +22,1 @@\n"
+            "-old\n"
+            "+new\n")
+    (sly-agent-q-diff-mode)
+    (should (= 3 (sly-agent-q-diff--count-hunks)))))
+
+(ert-deftest sly-agent-q-diff-test-hunk-state-init ()
+  "Hunk states should initialize as empty alist."
+  (with-temp-buffer
+    (sly-agent-q-diff-mode)
+    (should (null sly-agent-q-diff--hunk-states))))
+
 (provide 'sly-agent-q-diff-test)
 ;;; sly-agent-q-diff-test.el ends here

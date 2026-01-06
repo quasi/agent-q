@@ -23,6 +23,7 @@
 ;;; Code:
 
 (require 'diff-mode)
+(require 'cl-lib)
 
 ;;; Customization
 
@@ -57,6 +58,23 @@
 
 (defvar-local sly-agent-q-diff--decision nil
   "User's decision: 'accepted or 'rejected.")
+
+(defvar-local sly-agent-q-diff--hunk-states nil
+  "Alist mapping hunk positions to states.
+Each entry: (HUNK-START . STATE)
+STATE: 'pending | 'accepted | 'rejected | 'applied")
+
+;;; Hunk utilities
+
+(defun sly-agent-q-diff--count-hunks ()
+  "Return the number of hunks in current diff buffer."
+  (save-excursion
+    (goto-char (point-min))
+    (let ((count 0))
+      ;; Count @@ lines which mark hunk headers
+      (while (re-search-forward "^@@" nil t)
+        (cl-incf count))
+      count)))
 
 ;;; Major mode
 
