@@ -41,9 +41,11 @@
                                                    Save the buffer when ready."
                                              path))
                                      ((string= decision "rejected")
-                                      (format nil "✗ Changes rejected by user for ~A~%~%~
-                                                   The file remains unchanged. Consider revising your approach ~
-                                                   or asking the user for clarification."
+                                      (format nil "✗ REJECTED: User explicitly declined changes to ~A~%~%~
+                                                   STOP: Do NOT retry or propose alternative changes. ~
+                                                   The user has made a deliberate decision to reject this edit. ~
+                                                   Report to the user that the changes were not applied and ask ~
+                                                   if they would like to proceed differently."
                                              path))
                                      (t
                                       (format nil "⚠ Unexpected response from diff UI: ~A~%~%~
