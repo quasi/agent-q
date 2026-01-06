@@ -310,5 +310,32 @@ Returns the diff as a string."
       (diff-hunk-next)
     (error nil)))
 
+(defun sly-agent-q-diff-finish ()
+  "Finish reviewing hunks and close diff buffer."
+  (interactive)
+  (unless (derived-mode-p 'sly-agent-q-diff-mode)
+    (user-error "Not in Agent-Q diff buffer"))
+
+  ;; Check if there are unreviewed hunks
+  (let* ((all-hunks (sly-agent-q-diff--count-hunks))
+         (reviewed-hunks (length sly-agent-q-diff--hunk-states))
+         (applied (cl-count 'applied sly-agent-q-diff--hunk-states :key #'cdr))
+         (rejected (cl-count 'rejected sly-agent-q-diff--hunk-states :key #'cdr)))
+
+    (when (< reviewed-hunks all-hunks)
+      (unless (yes-or-no-p
+               (format "%d unreviewed hunk(s) remaining. Finish anyway? "
+                       (- all-hunks reviewed-hunks)))
+        (user-error "Continue reviewing")))
+
+    ;; Set decision for Lisp side
+    (setq sly-agent-q-diff--decision
+          (if (> applied 0) 'accepted 'rejected))
+
+    (message "Review complete: %d applied, %d rejected" applied rejected)
+
+    ;; Exit recursive edit (caller will clean up buffer)
+    (exit-recursive-edit)))
+
 (provide 'sly-agent-q-diff)
 ;;; sly-agent-q-diff.el ends here
