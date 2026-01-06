@@ -162,19 +162,32 @@ Returns 'accepted if user accepts, 'rejected otherwise."
           "accepted"
         "rejected"))))
 
+(defun sly-agent-q-diff--unescape-string (str)
+  "Unescape common escape sequences in STR.
+Converts \\t to tab, \\n to newline, \\\\ to backslash."
+  (let ((result str))
+    ;; Order matters: unescape backslash-backslash last
+    (setq result (replace-regexp-in-string "\\\\t" "\t" result))
+    (setq result (replace-regexp-in-string "\\\\n" "\n" result))
+    (setq result (replace-regexp-in-string "\\\\\\\\" "\\" result))
+    result))
+
 (defun sly-agent-q-diff--generate-unified-diff (original modified path)
   "Generate unified diff between ORIGINAL and MODIFIED for PATH.
 
 Returns the diff as a string."
-  (let ((orig-file (make-temp-file "agent-q-orig-"))
-        (mod-file (make-temp-file "agent-q-mod-")))
+  ;; Unescape content in case SLY serialization escaped special chars
+  (let* ((orig-unescaped (sly-agent-q-diff--unescape-string original))
+         (mod-unescaped (sly-agent-q-diff--unescape-string modified))
+         (orig-file (make-temp-file "agent-q-orig-"))
+         (mod-file (make-temp-file "agent-q-mod-")))
     (unwind-protect
         (progn
           ;; Write content to temp files
           (with-temp-file orig-file
-            (insert original))
+            (insert orig-unescaped))
           (with-temp-file mod-file
-            (insert modified))
+            (insert mod-unescaped))
 
           ;; Generate diff
           (with-temp-buffer
