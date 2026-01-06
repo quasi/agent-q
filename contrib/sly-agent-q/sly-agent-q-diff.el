@@ -153,6 +153,7 @@ Shows counts for applied, rejected, and pending hunks along with keybinding hint
     (define-key map (kbd "q") #'sly-agent-q-diff-finish)
     (define-key map (kbd "SPC") #'sly-agent-q-diff-toggle-hunk)
     (define-key map (kbd "RET") #'sly-agent-q-diff-preview-hunk)
+    (define-key map (kbd "?") #'sly-agent-q-diff-show-help)
     map)
   "Keymap for `sly-agent-q-diff-mode'.")
 
@@ -454,6 +455,40 @@ If rejected or pending, attempt to apply the hunk."
       (diff-beginning-of-hunk)
       ;; Use built-in diff-goto-source to jump to location
       (diff-goto-source))))
+
+(defun sly-agent-q-diff-show-help ()
+  "Display help buffer with keybinding reference."
+  (interactive)
+  (let ((help-text
+         (concat
+          (propertize "Agent-Q Diff Mode Help\n\n" 'face 'bold)
+          (propertize "Per-Hunk Commands:\n" 'face 'underline)
+          "  a         - Accept current hunk (apply immediately)\n"
+          "  r         - Reject current hunk (skip)\n"
+          "  SPC       - Toggle hunk state\n"
+          "  n         - Next hunk\n"
+          "  p         - Previous hunk\n"
+          "  RET       - Preview source location\n"
+          "  q         - Finish review and close\n\n"
+          (propertize "All-or-Nothing (Legacy):\n" 'face 'underline)
+          "  C-c C-c   - Accept all hunks\n"
+          "  C-c C-k   - Reject all hunks\n\n"
+          (propertize "Help:\n" 'face 'underline)
+          "  ?         - Toggle this help\n\n"
+          (propertize "Press ? or q to close" 'face 'italic))))
+
+    (let ((buf (get-buffer-create "*Agent-Q Diff Help*")))
+      (with-current-buffer buf
+        (let ((inhibit-read-only t))
+          (erase-buffer)
+          (insert help-text)
+          (goto-char (point-min))
+          (view-mode)
+          (local-set-key (kbd "?") #'quit-window)
+          (local-set-key (kbd "q") #'quit-window)))
+      (pop-to-buffer buf)
+      (fit-window-to-buffer)
+      (message "Press ? or q to close help"))))
 
 (provide 'sly-agent-q-diff)
 ;;; sly-agent-q-diff.el ends here
