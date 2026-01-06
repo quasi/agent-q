@@ -28,7 +28,8 @@
    If include-context is true, prepend accumulated context to the message."))
 
 (defmethod send-to-agent ((agent agent) user-message &key include-context)
-  "Send message to LLM via cl-llm-provider and return response."
+  "Send message to agent with tool execution loop.
+   This implements the agentic loop: LLM responds → execute tools → send results back → repeat until done."
   (let* ((conversation (agent-conversation agent))
          ;; Build full message with context if requested
          (context-string (when include-context
@@ -42,31 +43,99 @@
     ;; Add user message to history
     (add-message conversation :user full-message)
 
-    ;; Build messages list for cl-llm-provider
-    ;; Format: List of plists with :role and :content
-    (let* ((history-msgs (conversation-messages conversation))
-           (messages (mapcar (lambda (msg)
-                              (list :role (string-downcase
-                                          (symbol-name (message-role msg)))
-                                    :content (message-content msg)))
-                            history-msgs)))
+    ;; Build initial messages list
+    (let ((messages (build-messages-for-llm conversation)))
 
-      ;; Call LLM via cl-llm-provider
+      ;; Agent loop: iterate until LLM stops requesting tools
       (handler-case
-          (let ((response (cl-llm-provider:complete
-                          messages
-                          :provider (or (agent-provider agent)
-                                       *provider-instance*)
-                          :system (agent-system-prompt agent)
-                          :max-tokens 4096)))
+          (loop with max-iterations = 10
+                for iteration from 1 to max-iterations
+                do
+                (progn
+                  (format t "~&[AGENT-Q] Iteration ~D~%" iteration)
 
-            ;; Extract content from response
-            (let ((content (cl-llm-provider:response-content response)))
-              ;; Add assistant response to conversation history
-              (add-message conversation :assistant content)
+                  ;; Call LLM with tools
+                  (let ((response (send-to-llm-with-tools
+                                  messages
+                                  (agent-system-prompt agent)
+                                  :max-safety-level :moderate)))
 
-              ;; Return content
-              content))
+                    (cond
+                      ;; Case 1: Text response with no tool calls - we're done
+                      ((and (cl-llm-provider:response-content response)
+                            (null (cl-llm-provider:response-tool-calls response)))
+                       (let ((content (cl-llm-provider:response-content response)))
+                         (format t "~&[AGENT-Q] Agent completed (text response)~%")
+                         ;; Add assistant response to conversation history
+                         (add-message conversation :assistant content)
+                         (return content)))
+
+                      ;; Case 2: Tool calls - execute and continue loop
+                      ((cl-llm-provider:response-tool-calls response)
+                       (let ((num-tools (length (cl-llm-provider:response-tool-calls response))))
+                         (format t "~&[AGENT-Q] Executing ~D tool call~:P~%" num-tools)
+
+                         ;; Verbose: Log which tools are being called
+                         (when *verbose-mode*
+                           (let* ((tool-names (mapcar (lambda (tc)
+                                                        (cl-llm-provider:tool-call-name tc))
+                                                     (cl-llm-provider:response-tool-calls response)))
+                                  (msg (format nil "⚙ Calling tools: ~{~A~^, ~}" tool-names)))
+                             (add-message conversation :debug msg)
+                             ;; Send to Emacs immediately
+                             (agent-q.tools:eval-in-emacs
+                              `(sly-agent-q--append-to-conversation 'debug ,msg)))))
+
+                       ;; Execute tools
+                       (let* ((exec-results (execute-tool-calls-safe response))
+                              (tool-msgs (tool-results-to-messages exec-results))
+                              (assistant-msg (cl-llm-provider:response-message response)))
+
+                         ;; Verbose: Log tool results
+                         (when *verbose-mode*
+                           (dolist (result exec-results)
+                             (let* ((tool-call (car result))
+                                    (tool-result (cdr result))
+                                    (tool-name (cl-llm-provider:tool-call-name tool-call))
+                                    (result-str (etypecase tool-result
+                                                  (string tool-result)
+                                                  (condition (format nil "ERROR: ~A" tool-result))
+                                                  (t (format nil "~S" tool-result))))
+                                    ;; Truncate long results
+                                    (truncated (if (> (length result-str) 200)
+                                                  (format nil "~A... [truncated, ~D chars total]"
+                                                         (subseq result-str 0 200)
+                                                         (length result-str))
+                                                  result-str))
+                                    (msg (format nil "  → ~A: ~A" tool-name truncated)))
+                               (add-message conversation :debug msg)
+                               ;; Send to Emacs immediately
+                               (agent-q.tools:eval-in-emacs
+                                `(sly-agent-q--append-to-conversation 'debug ,msg)))))
+
+                         ;; Add assistant message text to conversation history
+                         ;; (We save text for display, but keep full message with tool_calls for LLM)
+                         (add-message conversation :assistant
+                                     (or (getf assistant-msg :content) ""))
+
+                         ;; Append assistant message (WITH tool_calls) and tool results to messages
+                         ;; This is critical: the assistant message must include tool_calls so that
+                         ;; the tool result messages can reference them via tool_call_id
+                         (setf messages (append messages
+                                               (list assistant-msg)
+                                               tool-msgs))))
+
+                      ;; Case 3: Unexpected response format
+                      (t
+                       (let ((err-msg "Unexpected response format from LLM"))
+                         (format t "~&[AGENT-Q ERROR] ~A~%" err-msg)
+                         (return err-msg))))))
+
+                finally
+                ;; Max iterations reached
+                (let ((msg "Maximum iterations reached. The agent may be stuck in a loop."))
+                  (format t "~&[AGENT-Q WARNING] ~A~%" msg)
+                  (return msg)))
 
         ;; Error handling
         (cl-llm-provider:provider-authentication-error (e)
@@ -79,7 +148,8 @@
           (format nil "API error: ~A" e))
 
         (error (e)
-          (format nil "Unexpected error: ~A" e))))))
+          (format nil "Unexpected error: ~A~%~%Backtrace: ~A"
+                 e (agent-q.tools:capture-backtrace-portable)))))))
 
 (defun get-last-response ()
   "Get the last assistant response from current agent."

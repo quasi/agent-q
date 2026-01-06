@@ -2,11 +2,11 @@
 
 ;; Copyright (C) 2025
 
-;; Author: Your Name
-;; Version: 0.1.4
-;; Package-Requires: ((emacs "25.1") (sly "1.0"))
-;; Keywords: lisp, ai, assistant
-;; URL: https://github.com/yourusername/agent-q
+;; Author: Abhijit Rao <quasi@quasilabs.in>
+;; Version: 0.2.0
+;; Package-Requires: ((emacs "27.1") (sly "1.0"))
+;; Keywords: lisp, ai, assistant, tools
+;; URL: https://github.com/quasilabs/agent-q
 
 ;;; Commentary:
 
@@ -17,6 +17,11 @@
 ;;; Code:
 
 (require 'sly)
+(require 'sly-agent-q-diff)
+(require 'sly-agent-q-tools)
+
+;; Enable eval-in-emacs for Agent-Q to send debug messages in real-time
+(setq sly-enable-evaluate-in-emacs t)
 
 ;;; Customization
 
@@ -56,6 +61,11 @@ Otherwise show in conversation buffer only."
 (defface sly-agent-q-context-face
   '((t :foreground "yellow" :slant italic))
   "Face for context indicators."
+  :group 'sly-agent-q)
+
+(defface sly-agent-q-debug-face
+  '((t :foreground "gray50" :slant italic))
+  "Face for debug/tool execution messages in conversation buffer."
   :group 'sly-agent-q)
 
 ;;; State
@@ -132,10 +142,18 @@ Returns t if loaded, nil otherwise."
       (let ((face (pcase role
                     ('user 'sly-agent-q-user-face)
                     ('assistant 'sly-agent-q-assistant-face)
+                    ('debug 'sly-agent-q-debug-face)
                     (_ 'default))))
-        (insert (propertize (format "\n[%s]\n" (upcase (symbol-name role)))
-                           'face face))
-        (insert content "\n"))
+        ;; For debug messages, don't show the [DEBUG] header, just indent the content
+        (if (eq role 'debug)
+            (insert (propertize (format "  %s\n" content)
+                               'face face))
+          (progn
+            ;; Show [AGENT-Q] instead of [ASSISTANT] for assistant role
+            (let ((role-label (if (eq role 'assistant) "AGENT-Q" (upcase (symbol-name role)))))
+              (insert (propertize (format "\n[%s]\n" role-label)
+                                 'face face)))
+            (insert content "\n"))))
       (goto-char (point-max)))))
 
 ;;; Context Commands
@@ -212,6 +230,8 @@ Returns t if loaded, nil otherwise."
         (if (stringp response)
             (progn
               (setq sly-agent-q--last-response response)
+              ;; Debug messages appear in real-time during execution
+              ;; Just append the final response
               (sly-agent-q--append-to-conversation 'assistant response)
               (message "Agent-Q response received"))
           ;; Debug: unexpected response type

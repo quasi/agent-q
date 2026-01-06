@@ -7,7 +7,7 @@
 (defclass message ()
   ((role :initarg :role
          :accessor message-role
-         :type (member :system :user :assistant))
+         :type (member :system :user :assistant :debug))
    (content :initarg :content
             :accessor message-content
             :type string)

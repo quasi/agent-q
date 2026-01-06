@@ -13,6 +13,9 @@
 (defvar *provider-instance* nil
   "Active cl-llm-provider instance.")
 
+(defparameter *verbose-mode* t
+  "When T, log tool execution details to the conversation buffer.")
+
 ;;; Configuration functions
 
 (defun load-config ()

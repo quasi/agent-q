@@ -68,3 +68,11 @@
                         :timestamp (message-timestamp msg)))
                 messages))
       nil))
+
+;;; Phase 2: Diff workflow RPC endpoint
+
+(defun agent-q-show-diff (path original modified description)
+  "Show diff in Emacs and wait for user decision.
+   Returns 'ACCEPTED or 'REJECTED."
+  (agent-q.tools:eval-in-emacs
+   `(sly-agent-q-show-diff-and-wait ,path ,original ,modified ,description)))
