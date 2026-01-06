@@ -145,12 +145,14 @@ Shows counts for applied, rejected, and pending hunks along with keybinding hint
     (define-key map (kbd "C-c C-c") #'sly-agent-q-diff-accept)
     (define-key map (kbd "C-c C-k") #'sly-agent-q-diff-reject)
 
-    ;; Per-hunk approval (new)
+    ;; Per-hunk approval
     (define-key map (kbd "a") #'sly-agent-q-diff-accept-hunk)
     (define-key map (kbd "r") #'sly-agent-q-diff-reject-hunk)
     (define-key map (kbd "n") #'diff-hunk-next)
     (define-key map (kbd "p") #'diff-hunk-prev)
     (define-key map (kbd "q") #'sly-agent-q-diff-finish)
+    (define-key map (kbd "SPC") #'sly-agent-q-diff-toggle-hunk)
+    (define-key map (kbd "RET") #'sly-agent-q-diff-preview-hunk)
     map)
   "Keymap for `sly-agent-q-diff-mode'.")
 
@@ -409,6 +411,49 @@ Returns the diff as a string."
 
     ;; Exit recursive edit (caller will clean up buffer)
     (exit-recursive-edit)))
+
+(defun sly-agent-q-diff-toggle-hunk ()
+  "Toggle current hunk between accepted and rejected states.
+If the hunk is already applied, mark as pending (cannot unapply).
+If rejected or pending, attempt to apply the hunk."
+  (interactive)
+  (unless (derived-mode-p 'sly-agent-q-diff-mode)
+    (user-error "Not in Agent-Q diff buffer"))
+
+  (save-excursion
+    (diff-beginning-of-hunk)
+    (let* ((hunk-start (point))
+           (current-state (alist-get hunk-start sly-agent-q-diff--hunk-states)))
+      (pcase current-state
+        ('applied
+         ;; Can't unapply, so just mark as pending
+         (setf (alist-get hunk-start sly-agent-q-diff--hunk-states) nil)
+         (sly-agent-q-diff--clear-hunk-overlays)
+         (sly-agent-q-diff--update-header)
+         (message "Hunk marked as pending (cannot unapply)"))
+
+        ('rejected
+         ;; Try to apply
+         (sly-agent-q-diff-accept-hunk))
+
+        (_
+         ;; Pending - accept by default
+         (sly-agent-q-diff-accept-hunk))))))
+
+(defun sly-agent-q-diff-preview-hunk ()
+  "Jump to source location where current hunk would apply."
+  (interactive)
+  (unless (derived-mode-p 'sly-agent-q-diff-mode)
+    (user-error "Not in Agent-Q diff buffer"))
+
+  (let ((path sly-agent-q-diff--path))
+    (unless path
+      (user-error "No file path set"))
+
+    (save-excursion
+      (diff-beginning-of-hunk)
+      ;; Use built-in diff-goto-source to jump to location
+      (diff-goto-source))))
 
 (provide 'sly-agent-q-diff)
 ;;; sly-agent-q-diff.el ends here
