@@ -149,8 +149,16 @@ Returns 'accepted if user accepts, 'rejected otherwise."
     (recursive-edit)
 
     ;; Return decision as string (SLY can't serialize symbols)
-    (with-current-buffer diff-buffer
-      (if (eq sly-agent-q-diff--decision 'accepted)
+    ;; Buffer may have been killed by accept/reject, so check first
+    (let ((decision (if (buffer-live-p diff-buffer)
+                        (with-current-buffer diff-buffer
+                          sly-agent-q-diff--decision)
+                      ;; Buffer was killed, default to rejected
+                      'rejected)))
+      ;; Clean up the buffer if still alive
+      (when (buffer-live-p diff-buffer)
+        (kill-buffer diff-buffer))
+      (if (eq decision 'accepted)
           "accepted"
         "rejected"))))
 
@@ -219,11 +227,9 @@ Returns the diff as a string."
          (message "✗ Error applying diff: %s" (error-message-string err))
          (user-error "Failed to apply changes: %s" (error-message-string err)))))
 
-    ;; Set decision and close diff buffer BEFORE exit-recursive-edit
-    ;; (exit-recursive-edit unwinds the stack, so code after it won't run)
+    ;; Set decision and exit recursive edit
+    ;; Don't kill buffer here - sly-agent-q-show-diff-and-wait needs to read the decision
     (setq sly-agent-q-diff--decision 'accepted)
-    (when (buffer-live-p diff-buf)
-      (kill-buffer diff-buf))
     (exit-recursive-edit)))
 
 (defun sly-agent-q-diff-reject ()
@@ -233,9 +239,9 @@ Returns the diff as a string."
     (user-error "Not in Agent-Q diff buffer"))
 
   (setq sly-agent-q-diff--decision 'rejected)
-  (exit-recursive-edit)
   (message "✗ Changes rejected")
-  (quit-window))
+  ;; Don't kill buffer here - sly-agent-q-show-diff-and-wait needs to read the decision
+  (exit-recursive-edit))
 
 (provide 'sly-agent-q-diff)
 ;;; sly-agent-q-diff.el ends here
