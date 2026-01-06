@@ -118,6 +118,25 @@ STATE: 'pending | 'accepted | 'rejected | 'applied")
   "Remove all hunk state overlays from buffer."
   (remove-overlays (point-min) (point-max) 'sly-agent-q-hunk-state))
 
+(defun sly-agent-q-diff--update-header ()
+  "Update diff header with hunk progress.
+Shows counts for applied, rejected, and pending hunks along with keybinding hints."
+  (let* ((total (sly-agent-q-diff--count-hunks))
+         (applied (cl-count 'applied sly-agent-q-diff--hunk-states :key #'cdr))
+         (rejected (cl-count 'rejected sly-agent-q-diff--hunk-states :key #'cdr))
+         (pending (- total applied rejected)))
+    (save-excursion
+      (goto-char (point-min))
+      ;; Find the progress/keybinding line (starts with "Progress:" or "C-c C-c")
+      (when (re-search-forward "^\\(Progress:\\|C-c C-c =\\)" nil t)
+        (let ((inhibit-read-only t))
+          (beginning-of-line)
+          (delete-region (point) (line-end-position))
+          (insert (propertize
+                   (format "Progress: %d/%d applied, %d rejected, %d pending  |  [a]ccept [r]eject [n]ext [p]rev [q]uit"
+                           applied total rejected pending)
+                   'face 'sly-agent-q-diff-keybinding)))))))
+
 ;;; Major mode
 
 (defvar sly-agent-q-diff-mode-map
@@ -173,6 +192,7 @@ Returns 'accepted if user accepts, 'rejected otherwise."
                            'face 'sly-agent-q-diff-header))
         (insert (propertize (format "Description: %s\n\n" description)
                            'face 'font-lock-comment-face))
+        ;; Placeholder for progress line (updated by sly-agent-q-diff--update-header)
         (insert (propertize "C-c C-c = ACCEPT  |  C-c C-k = REJECT  |  q = REJECT & QUIT\n\n"
                            'face 'sly-agent-q-diff-keybinding))
 
@@ -186,7 +206,10 @@ Returns 'accepted if user accepts, 'rejected otherwise."
            (insert "\n--- Original ---\n")
            (insert original)
            (insert "\n\n--- Modified ---\n")
-           (insert modified)))))
+           (insert modified)))
+
+        ;; Update header with initial hunk count
+        (sly-agent-q-diff--update-header)))
 
     ;; Display buffer and switch to it
     (pop-to-buffer diff-buffer)
@@ -327,6 +350,7 @@ Returns the diff as a string."
                   'applied)
             ;; Visual feedback
             (sly-agent-q-diff--mark-hunk-applied hunk-start)
+            (sly-agent-q-diff--update-header)
             (message "✓ Hunk applied"))
         (error
          (message "✗ Failed to apply hunk: %s" (error-message-string err))
@@ -351,6 +375,7 @@ Returns the diff as a string."
             'rejected)
       ;; Visual feedback
       (sly-agent-q-diff--mark-hunk-rejected hunk-start)
+      (sly-agent-q-diff--update-header)
       (message "✗ Hunk rejected")))
 
   ;; Move to next hunk
