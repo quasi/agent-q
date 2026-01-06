@@ -439,9 +439,48 @@ Quick Actions:
 
 **Diff Review (in *Agent-Q Diff* buffer):**
 ```
-  C-c C-c  - Accept changes (apply diff)
-  C-c C-k  - Reject changes (discard diff)
+Per-Hunk (New in v0.3):
+  a        - Accept current hunk (apply immediately)
+  r        - Reject current hunk (skip)
+  SPC      - Toggle hunk state
+  n        - Next hunk
+  p        - Previous hunk
+  RET      - Preview source location
+  q        - Finish review
+  ?        - Show help
+
+All-or-Nothing:
+  C-c C-c  - Accept all changes
+  C-c C-k  - Reject all changes
 ```
+
+### Reviewing Diffs Per-Hunk (New in v0.3)
+
+When Agent-Q proposes changes, you can review each change individually:
+
+**Quick Start:**
+1. Diff buffer opens with all proposed changes
+2. Press `n` to go to next hunk, `p` for previous
+3. Press `a` to accept current hunk (applies immediately)
+4. Press `r` to reject current hunk (skip it)
+5. Press `q` when done reviewing
+
+**Visual Feedback:**
+- Green background with [APPLIED] = applied
+- Red background with [REJECTED] = rejected
+- Progress line shows: X/Y applied, Z rejected, W pending
+
+**Example Workflow:**
+```
+Agent proposes 3 changes to defun FOO:
+  [Hunk 1] Add docstring          ← Press 'a' to accept
+  [Hunk 2] Rename to foo-impl     ← Press 'r' to reject
+  [Hunk 3] Add type declaration   ← Press 'a' to accept
+
+Result: 2/3 hunks applied, file modified, save when ready
+```
+
+See `docs/DIFF-REVIEW-GUIDE.md` for detailed examples.
 
 ## Troubleshooting
 
