@@ -406,6 +406,51 @@ Returns t if loaded, nil otherwise."
     map)
   "Keymap for sly-agent-q-mode minor mode.")
 
+;;; Menu
+
+(easy-menu-define sly-agent-q-menu sly-agent-q-mode-map
+  "Menu for Agent-Q commands."
+  '("Agent-Q"
+    ["Send Message" sly-agent-q-send
+     :help "Send a message to Agent-Q"]
+    ["Send Message with Context" sly-agent-q-send-with-context
+     :help "Send a message to Agent-Q including accumulated context"]
+    ["Send Region with Instruction" sly-agent-q-send-region-with-instruction
+     :active (use-region-p)
+     :help "Send selected region with an instruction"]
+    "---"
+    ("Context"
+     ["Add Region to Context" sly-agent-q-add-region-to-context
+      :active (use-region-p)
+      :help "Add the selected region to Agent-Q context"]
+     ["Add Buffer to Context" sly-agent-q-add-buffer-to-context
+      :help "Add the entire current buffer to Agent-Q context"]
+     ["Add Function to Context" sly-agent-q-add-defun-to-context
+      :help "Add the current top-level form to Agent-Q context"]
+     "---"
+     ["Show Context Summary" sly-agent-q-show-context
+      :help "Display current context summary"]
+     ["Clear Context" sly-agent-q-clear-context
+      :help "Clear all accumulated context"])
+    ("Conversation"
+     ["Show Conversation Buffer" sly-agent-q-show-conversation
+      :help "Show or switch to the conversation buffer"]
+     ["New Conversation" sly-agent-q-new-conversation
+      :help "Start a new conversation, clearing history"])
+    ("Response"
+     ["Insert Last Response" sly-agent-q-insert-last-response
+      :help "Insert the last agent response at point"]
+     ["Copy Last Response" sly-agent-q-copy-last-response
+      :help "Copy the last agent response to kill ring"])
+    ("Quick Actions"
+     ["Document Function" sly-agent-q-document-defun
+      :help "Ask agent to document the current function"]
+     ["Explain Region" sly-agent-q-explain-region
+      :active (use-region-p)
+      :help "Ask agent to explain the selected code"]
+     ["Fix Error" sly-agent-q-fix-error
+      :help "Send recent error to agent and ask for fix"])))
+
 ;;; Minor Mode
 
 ;;;###autoload
@@ -413,7 +458,10 @@ Returns t if loaded, nil otherwise."
   "Minor mode for Agent-Q integration with SLY."
   :lighter " AgentQ"
   :keymap sly-agent-q-mode-map
-  :group 'sly-agent-q)
+  :group 'sly-agent-q
+  (if sly-agent-q-mode
+      (easy-menu-add sly-agent-q-menu)
+    (easy-menu-remove sly-agent-q-menu)))
 
 ;;; Auto-load agent-q on connection
 
