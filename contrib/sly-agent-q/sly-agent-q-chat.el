@@ -46,6 +46,20 @@
   :type 'string
   :group 'agent-q-chat)
 
+(defcustom agent-q-render-markdown t
+  "Whether to render markdown in assistant responses.
+When non-nil, bold, italic, inline code, links, and fenced code
+blocks will be rendered with appropriate faces and highlighting."
+  :type 'boolean
+  :group 'agent-q-chat)
+
+(defcustom agent-q-show-message-separators t
+  "Whether to show separators between messages.
+When non-nil, a subtle dotted line appears between each message
+for visual clarity."
+  :type 'boolean
+  :group 'agent-q-chat)
+
 ;;; Data Structures
 
 (cl-defstruct (agent-q-message (:constructor agent-q-message--create))
@@ -139,6 +153,42 @@
   '((t :foreground "#5c6370" :slant italic))
   "Face for debug/tool execution messages."
   :group 'agent-q-chat)
+
+(defface agent-q-code-block-face
+  '((((background dark))
+     :background "#2c323c" :extend t)
+    (((background light))
+     :background "#f0f0f0" :extend t))
+  "Face for fenced code block background.
+The `:extend t' property ensures the background color extends
+to the edge of the window, not just the text width."
+  :group 'agent-q-chat)
+
+(defface agent-q-inline-code-face
+  '((((background dark))
+     :background "#3e4451" :foreground "#e5c07b")
+    (((background light))
+     :background "#e8e8e8" :foreground "#986801"))
+  "Face for inline `code` snippets."
+  :group 'agent-q-chat)
+
+(defface agent-q-code-lang-face
+  '((t :foreground "#5c6370" :slant italic :height 0.9))
+  "Face for code block language identifier (e.g., lisp, python)."
+  :group 'agent-q-chat)
+
+(defface agent-q-message-separator-face
+  '((t :foreground "#3e4451" :height 0.8))
+  "Face for message separators between chat messages."
+  :group 'agent-q-chat)
+
+;;; Rendering Constants
+
+(defconst agent-q--code-block-regexp
+  "^```\\([a-zA-Z0-9+-]*\\)\n\\(\\(?:.*\n\\)*?\\)```$"
+  "Regexp matching fenced code blocks in markdown.
+Group 1: language identifier (may be empty)
+Group 2: code content (without the fence markers)")
 
 ;;; Keymap
 
@@ -445,6 +495,10 @@ Stores the message in the session and cleans up streaming state.
 If FULL-CONTENT is non-empty and nothing was streamed, the content
 is inserted now (handles synchronous responses from the agent).
 
+After content is finalized, applies markdown rendering (bold, italic,
+code blocks with syntax highlighting, clickable links) and optionally
+inserts a message separator.
+
 Also sets `sly-agent-q--last-response' so users can insert the
 response into other buffers with `sly-agent-q-insert-last-response'."
   ;; Store in session
@@ -456,29 +510,187 @@ response into other buffers with `sly-agent-q-insert-last-response'."
   (when (and full-content (not (string-empty-p full-content)))
     (setq sly-agent-q--last-response full-content))
 
-  ;; Insert content if it wasn't streamed
-  ;; (streaming-marker points to where content should appear, has insertion-type t)
-  (when (and agent-q--streaming-marker
-             full-content
-             (not (string-empty-p full-content)))
-    (save-excursion
-      (goto-char agent-q--streaming-marker)
-      (let ((inhibit-read-only t))
-        (insert full-content)
-        ;; streaming-marker advanced past content (insertion-type t)
-        ;; Update output-end-marker to track it
-        (set-marker agent-q--output-end-marker (point)))))
+  ;; Capture message start position before any modifications
+  (let ((msg-start (and agent-q--streaming-marker
+                        (marker-position agent-q--streaming-marker))))
 
-  ;; Finalize buffer display (add trailing newlines after content)
-  (save-excursion
-    (goto-char agent-q--output-end-marker)
-    (let ((inhibit-read-only t))
-      (insert "\n\n")
-      (set-marker agent-q--output-end-marker (point))))
+    ;; Insert content if it wasn't streamed
+    ;; (streaming-marker points to where content should appear, has insertion-type t)
+    (when (and agent-q--streaming-marker
+               full-content
+               (not (string-empty-p full-content)))
+      (save-excursion
+        (goto-char agent-q--streaming-marker)
+        (let ((inhibit-read-only t))
+          (insert full-content)
+          ;; streaming-marker advanced past content (insertion-type t)
+          ;; Update output-end-marker to track it
+          (set-marker agent-q--output-end-marker (point)))))
+
+    ;; Finalize buffer display (add trailing newlines after content)
+    (let ((msg-end nil))
+      (save-excursion
+        (goto-char agent-q--output-end-marker)
+        (let ((inhibit-read-only t))
+          (insert "\n\n")
+          (setq msg-end (point))
+          (set-marker agent-q--output-end-marker (point))))
+
+      ;; Apply markdown rendering to the message content
+      (when msg-start
+        (agent-q--render-markdown msg-start msg-end))
+
+      ;; Insert message separator
+      (save-excursion
+        (goto-char agent-q--output-end-marker)
+        (agent-q--insert-message-separator)
+        (set-marker agent-q--output-end-marker (point)))))
 
   ;; Clean up state
   (setq agent-q--pending-response nil)
   (setq agent-q--streaming-marker nil))
+
+;;; Markdown Rendering
+
+(defun agent-q--lang-to-mode (lang)
+  "Map LANG string to an Emacs major mode function.
+Returns nil if no matching mode is found or if the mode isn't available."
+  (let ((mode (cond
+               ((member lang '("lisp" "common-lisp" "cl")) 'lisp-mode)
+               ((member lang '("elisp" "emacs-lisp")) 'emacs-lisp-mode)
+               ((string= lang "python") 'python-mode)
+               ((member lang '("js" "javascript")) 'js-mode)
+               ((member lang '("ts" "typescript")) 'typescript-mode)
+               ((string= lang "rust") 'rust-mode)
+               ((string= lang "go") 'go-mode)
+               ((member lang '("sh" "bash" "shell")) 'sh-mode)
+               ((string= lang "json") 'json-mode)
+               ((string= lang "yaml") 'yaml-mode)
+               ((string= lang "sql") 'sql-mode)
+               ((member lang '("md" "markdown")) 'markdown-mode)
+               ((string= lang "html") 'html-mode)
+               ((string= lang "css") 'css-mode)
+               ((string= lang "c") 'c-mode)
+               ((member lang '("c++" "cpp")) 'c++-mode)
+               ((string= lang "java") 'java-mode)
+               ((string= lang "ruby") 'ruby-mode)
+               (t nil))))
+    ;; Only return the mode if it's actually available
+    (when (and mode (fboundp mode))
+      mode)))
+
+(defun agent-q--fontify-code (code mode)
+  "Return CODE string fontified using MODE.
+Uses a temporary buffer to apply the mode's font-lock rules."
+  (with-temp-buffer
+    (insert code)
+    (delay-mode-hooks (funcall mode))
+    (font-lock-ensure)
+    (buffer-string)))
+
+(defun agent-q--highlight-code-region (start end lang)
+  "Apply syntax highlighting to code from START to END for LANG.
+The region is replaced with fontified text while preserving position."
+  (let ((mode (agent-q--lang-to-mode lang)))
+    (when mode
+      (let ((highlighted (agent-q--fontify-code
+                          (buffer-substring-no-properties start end)
+                          mode)))
+        (when highlighted
+          (delete-region start end)
+          (goto-char start)
+          (insert highlighted))))))
+
+(defun agent-q--render-code-blocks (start end)
+  "Render fenced code blocks in region from START to END.
+Applies background face and syntax highlighting based on language."
+  (save-excursion
+    (goto-char start)
+    (while (re-search-forward agent-q--code-block-regexp end t)
+      (let* ((lang (match-string 1))
+             (block-start (match-beginning 0))
+             (block-end (match-end 0))
+             (code-start (match-beginning 2))
+             (code-end (match-end 2)))
+
+        ;; Apply background to entire block
+        (put-text-property block-start block-end
+                           'face 'agent-q-code-block-face)
+
+        ;; Apply syntax highlighting to code content
+        (when (and lang (not (string-empty-p lang)))
+          (agent-q--highlight-code-region code-start code-end lang))
+
+        ;; Style the language identifier on the first line
+        (save-excursion
+          (goto-char block-start)
+          (when (looking-at "```\\([a-zA-Z0-9+-]+\\)")
+            (put-text-property (match-beginning 1) (match-end 1)
+                               'face 'agent-q-code-lang-face)))))))
+
+(defun agent-q--render-markdown (start end)
+  "Apply markdown rendering to region from START to END.
+Processes bold, italic, inline code, links, and fenced code blocks."
+  (when agent-q-render-markdown
+    (save-excursion
+      (let ((inhibit-read-only t))
+        ;; Bold: **text** or __text__
+        (goto-char start)
+        (while (re-search-forward "\\*\\*\\(.+?\\)\\*\\*\\|__\\(.+?\\)__" end t)
+          (let ((text (or (match-string 1) (match-string 2)))
+                (beg (match-beginning 0))
+                (fin (match-end 0)))
+            (delete-region beg fin)
+            (goto-char beg)
+            (insert (propertize text 'face 'bold))
+            ;; Adjust end marker for deleted characters
+            (setq end (+ end (- (length text) (- fin beg))))))
+
+        ;; Italic: *text* or _text_ (not inside words/code)
+        (goto-char start)
+        (while (re-search-forward "\\(?:^\\|[^*_\\\\]\\)\\([*_]\\)\\([^*_\n]+?\\)\\1" end t)
+          (let ((text (match-string 2))
+                (beg (match-beginning 1))
+                (fin (match-end 0)))
+            (delete-region beg fin)
+            (goto-char beg)
+            (insert (propertize text 'face 'italic))
+            (setq end (+ end (- (length text) (- fin beg))))))
+
+        ;; Inline code: `code`
+        (goto-char start)
+        (while (re-search-forward "`\\([^`\n]+\\)`" end t)
+          (let ((code (match-string 1)))
+            (replace-match
+             (propertize code 'face 'agent-q-inline-code-face)
+             t t)))
+
+        ;; Links: [text](url)
+        (goto-char start)
+        (while (re-search-forward "\\[\\([^]]+\\)\\](\\([^)]+\\))" end t)
+          (let ((text (match-string 1))
+                (url (match-string 2))
+                (beg (match-beginning 0))
+                (fin (match-end 0)))
+            (delete-region beg fin)
+            (goto-char beg)
+            (insert-button text
+                           'action (lambda (_) (browse-url url))
+                           'face 'link
+                           'help-echo url
+                           'follow-link t)))
+
+        ;; Render code blocks last (they span multiple lines)
+        (agent-q--render-code-blocks start end)))))
+
+(defun agent-q--insert-message-separator ()
+  "Insert a subtle separator after a message.
+Only inserts if `agent-q-show-message-separators' is non-nil."
+  (when agent-q-show-message-separators
+    (let ((inhibit-read-only t))
+      (insert (propertize (concat "\n" (make-string 60 ?·) "\n")
+                          'face 'agent-q-message-separator-face
+                          'read-only t)))))
 
 ;;; SLY Integration
 
