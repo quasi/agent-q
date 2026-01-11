@@ -404,13 +404,29 @@ Uses the new interactive chat interface."
             (cl:progn
               ;; Load agent-q (which depends on cl-llm-provider)
               (ql:quickload :agent-q :silent cl:t)
-              ;; Now load configuration using runtime symbol resolution
-              (cl:let ((pkg (cl:find-package :cl-llm-provider)))
-                (cl:when pkg
-                  (cl:let ((load-config-sym (cl:find-symbol "LOAD-CONFIGURATION-FROM-FILE" pkg)))
+              ;; Load configuration from cl-llm-provider config file
+              (cl:let ((llm-pkg (cl:find-package :cl-llm-provider)))
+                (cl:when llm-pkg
+                  (cl:let ((load-config-sym (cl:find-symbol "LOAD-CONFIGURATION-FROM-FILE" llm-pkg)))
                     (cl:when (cl:and load-config-sym (cl:fboundp load-config-sym))
                       (cl:funcall load-config-sym)))))
-              "Agent-Q loaded successfully")
+              ;; Sync agent-q's provider instance from cl-llm-provider
+              ;; Use runtime symbol resolution since package didn't exist at read time
+              (cl:let ((aq-pkg (cl:find-package :agent-q)))
+                (cl:when aq-pkg
+                  (cl:let ((sync-sym (cl:find-symbol "SYNC-FROM-CL-LLM-PROVIDER" aq-pkg))
+                           (provider-sym (cl:find-symbol "*PROVIDER-INSTANCE*" aq-pkg)))
+                    (cl:when (cl:and sync-sym (cl:fboundp sync-sym))
+                      (cl:funcall sync-sym))
+                    ;; Return status message
+                    (cl:let ((provider (cl:when (cl:and provider-sym (cl:boundp provider-sym))
+                                         (cl:symbol-value provider-sym))))
+                      (cl:if provider
+                          (cl:let ((llm-pkg (cl:find-package :cl-llm-provider)))
+                            (cl:let ((name-sym (cl:find-symbol "PROVIDER-NAME" llm-pkg)))
+                              (cl:format cl:nil "Agent-Q loaded (~A)"
+                                         (cl:funcall name-sym provider))))
+                          "Agent-Q loaded but provider not configured"))))))
           (cl:error (e)
             (cl:format cl:nil "Agent-Q auto-load failed: ~A" e))))
     (lambda (result)

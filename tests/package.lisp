@@ -24,6 +24,7 @@
                 #:response-tool-calls)
   (:export
    ;; Test suites
+   #:core-functionality
    #:phase-2-tools
    #:registry-tests
    #:introspection-tools-tests
@@ -37,4 +38,6 @@
    #:find-tool-handler
    #:find-tool-definition
    #:eval-form-handler
-   #:run-phase-2-tests))
+   #:run-phase-2-tests
+   #:run-core-tests
+   #:run-agent-q-tests))

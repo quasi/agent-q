@@ -15,6 +15,8 @@
    #:*provider-instance*
    #:*verbose-mode*
    #:configure
+   #:sync-from-cl-llm-provider
+   #:get-config-info
 
    ;; Context
    #:make-context-item

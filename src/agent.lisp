@@ -21,11 +21,41 @@
 (defvar *current-agent* nil
   "The currently active agent instance")
 
+;;; Helper functions
+
+(defun get-config-info ()
+  "Return current provider and model configuration as a plist.
+   Returns (:provider <keyword> :provider-name <string> :model <string>) on success,
+   or (:error <string>) if provider is not configured.
+
+   Requires *provider-instance* to be configured before calling.
+   The provider instance must have its default-model slot populated
+   (done by sync-from-cl-llm-provider or configure)."
+  (if *provider-instance*
+      (list :provider (cl-llm-provider:provider-type *provider-instance*)
+            :provider-name (cl-llm-provider:provider-name *provider-instance*)
+            :model (cl-llm-provider:provider-default-model *provider-instance*))
+      (list :error "Provider not configured. Please configure cl-llm-provider first.")))
+
 ;;; Main agent function
 
 (defgeneric send-to-agent (agent user-message &key include-context)
   (:documentation "Send a message to the agent and get a response.
    If include-context is true, prepend accumulated context to the message."))
+
+(defun report-session-info-to-emacs (model provider input-tokens output-tokens)
+  "Report session info to Emacs chat buffer.
+   MODEL - model name string
+   PROVIDER - provider keyword (e.g., :anthropic)
+   INPUT-TOKENS - total prompt tokens used
+   OUTPUT-TOKENS - total completion tokens used"
+  (when (and input-tokens output-tokens)
+    (agent-q.tools:eval-in-emacs
+     `(agent-q-chat-set-session-info
+       ,model
+       ,(when provider (symbol-name provider))
+       ,input-tokens
+       ,output-tokens))))
 
 (defmethod send-to-agent ((agent agent) user-message &key include-context)
   "Send message to agent with tool execution loop.
@@ -38,7 +68,15 @@
          (full-message (if context-string
                           (format nil "~A~%~%## Request~%~%~A"
                                   context-string user-message)
-                          user-message)))
+                          user-message))
+         ;; Token tracking - accumulate across all iterations
+         (total-input-tokens 0)
+         (total-output-tokens 0)
+         ;; Track the actual model used (from response, not defaults)
+         (actual-model nil)
+         ;; Derive provider type from the agent's provider instance
+         (actual-provider (when (agent-provider agent)
+                           (cl-llm-provider:provider-type (agent-provider agent)))))
 
     ;; Add user message to history
     (add-message conversation :user full-message)
@@ -60,6 +98,13 @@
                                   (agent-system-prompt agent)
                                   :max-safety-level :moderate)))
 
+                    ;; Capture actual model from response and accumulate token usage
+                    (setf actual-model (cl-llm-provider:response-model response))
+                    (let ((usage (cl-llm-provider:response-usage response)))
+                      (when usage
+                        (incf total-input-tokens (or (getf usage :prompt-tokens) 0))
+                        (incf total-output-tokens (or (getf usage :completion-tokens) 0))))
+
                     (cond
                       ;; Case 1: Text response with no tool calls - we're done
                       ((and (cl-llm-provider:response-content response)
@@ -68,6 +113,10 @@
                          (format t "~&[AGENT-Q] Agent completed (text response)~%")
                          ;; Add assistant response to conversation history
                          (add-message conversation :assistant content)
+                         ;; Report token usage to Emacs with actual model/provider
+                         (report-session-info-to-emacs
+                          actual-model actual-provider
+                          total-input-tokens total-output-tokens)
                          (return content)))
 
                       ;; Case 2: Tool calls - execute and continue loop
@@ -129,12 +178,20 @@
                       (t
                        (let ((err-msg "Unexpected response format from LLM"))
                          (format t "~&[AGENT-Q ERROR] ~A~%" err-msg)
+                         ;; Report token usage even on error with actual model/provider
+                         (report-session-info-to-emacs
+                          actual-model actual-provider
+                          total-input-tokens total-output-tokens)
                          (return err-msg))))))
 
                 finally
                 ;; Max iterations reached
                 (let ((msg "Maximum iterations reached. The agent may be stuck in a loop."))
                   (format t "~&[AGENT-Q WARNING] ~A~%" msg)
+                  ;; Report token usage even on max iterations with actual model/provider
+                  (report-session-info-to-emacs
+                   actual-model actual-provider
+                   total-input-tokens total-output-tokens)
                   (return msg)))
 
         ;; Error handling
@@ -165,8 +222,12 @@
 ;;; Initialize default agent if needed
 
 (defun ensure-agent ()
-  "Ensure *current-agent* exists, create if needed."
+  "Ensure *current-agent* exists, create if needed.
+   Requires *provider-instance* to be configured before calling."
   (unless *current-agent*
+    (unless *provider-instance*
+      (error "Cannot create agent: *provider-instance* is not configured. ~
+              Please ensure cl-llm-provider is configured before starting agent-q."))
     (setf *current-agent*
           (make-instance 'agent
                         :provider *provider-instance*

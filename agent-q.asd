@@ -32,16 +32,17 @@
 
 ;;; Test system
 (defsystem :agent-q/tests
-  :description "Tests for Agent-Q Phase 2 tool system"
+  :description "Tests for Agent-Q (all phases)"
   :author "Abhijit Rao <quasi@quasilabs.in>"
   :license "MIT"
-  :version "0.2.0"
+  :version "0.3.0"
   :serial t
   :depends-on (:agent-q :fiveam)
   :components ((:module "tests"
                 :serial t
                 :components ((:file "package")
+                            (:file "core-tests")
                             (:file "phase2-tools-tests")
                             (:file "phase2-integration-tests"))))
   :perform (test-op (op c)
-             (uiop:symbol-call :agent-q-tests '#:run-phase-2-tests)))
+             (uiop:symbol-call :agent-q-tests '#:run-agent-q-tests)))

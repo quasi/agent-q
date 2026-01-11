@@ -38,25 +38,39 @@
   API-KEY - API key (optional, reads from env var if not provided)
   BASE-URL - Base URL for provider (optional, for Ollama/custom endpoints)
 
-  Returns T on success, NIL on failure."
-  (handler-case
-      (progn
-        ;; Update defaults
-        (when provider (setf *default-provider* provider))
-        (when model (setf *default-model* model))
+  Returns T on success, signals error on failure."
+  ;; Update defaults
+  (when provider (setf *default-provider* provider))
+  (when model (setf *default-model* model))
 
-        ;; Create provider instance using cl-llm-provider
-        (setf *provider-instance*
-              (cl-llm-provider:make-provider
-               *default-provider*
-               :model *default-model*
-               :api-key api-key
-               :base-url base-url))
-        t)
-    (error (e)
-      (warn "Failed to configure provider: ~A" e)
-      nil)))
+  ;; Create provider instance using cl-llm-provider
+  (setf *provider-instance*
+        (cl-llm-provider:make-provider
+         *default-provider*
+         :model *default-model*
+         :api-key api-key
+         :base-url base-url))
+  t)
 
-;;; Initialize provider on load (reads from env vars)
-(unless *provider-instance*
-  (configure))
+(defun sync-from-cl-llm-provider ()
+  "Sync *provider-instance* from cl-llm-provider:*default-provider*.
+   Call this after cl-llm-provider:load-configuration-from-file.
+
+   Ensures the provider instance has its default-model slot populated
+   from cl-llm-provider:*default-model* if not already set.
+
+   Returns T if provider is now configured, NIL otherwise."
+  (when (and (not *provider-instance*)
+             cl-llm-provider:*default-provider*)
+    (setf *provider-instance* cl-llm-provider:*default-provider*)
+    ;; Ensure provider instance has model set from cl-llm-provider's global
+    (when (and cl-llm-provider:*default-model*
+               (null (cl-llm-provider:provider-default-model *provider-instance*)))
+      (setf (cl-llm-provider:provider-default-model *provider-instance*)
+            cl-llm-provider:*default-model*)))
+  (not (null *provider-instance*)))
+
+;;; NOTE: No auto-configuration on load.
+;;; Configuration happens via:
+;;; 1. cl-llm-provider:load-configuration-from-file (loads user config)
+;;; 2. agent-q:sync-from-cl-llm-provider (syncs to agent-q)

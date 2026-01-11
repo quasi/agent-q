@@ -28,6 +28,7 @@
 
 (require 'cl-lib)
 (require 'sly)
+;; Note: sly-agent-q-sessions is required AFTER struct definitions below
 
 ;;; Customization
 
@@ -84,6 +85,38 @@ for visual clarity."
   (messages nil :documentation "List of `agent-q-message' structs (most recent first).")
   (model nil :documentation "Model used (inherited from config if nil).")
   (metadata nil :documentation "Plist for extensibility."))
+
+;; Aliases for serialization (sessions module uses make-* names)
+(defalias 'make-agent-q-message #'agent-q-message--create)
+(defalias 'make-agent-q-session #'agent-q-session--create)
+
+;; Session setter - needed because sessions module loads before struct is defined
+(defun agent-q-session-set-name (session name)
+  "Set the NAME of SESSION."
+  (setf (agent-q-session-name session) name))
+
+(defun agent-q-session-set-model (session model)
+  "Set the MODEL of SESSION."
+  (setf (agent-q-session-model session) model))
+
+(defun agent-q-session-update-metadata (session key value)
+  "Update SESSION metadata with KEY set to VALUE."
+  (let ((meta (agent-q-session-metadata session)))
+    (setf (agent-q-session-metadata session)
+          (plist-put meta key value))))
+
+(defun agent-q-session-add-tokens (session input-tokens output-tokens)
+  "Add INPUT-TOKENS and OUTPUT-TOKENS to SESSION's running totals."
+  (let* ((meta (agent-q-session-metadata session))
+         (current-in (or (plist-get meta :total-input-tokens) 0))
+         (current-out (or (plist-get meta :total-output-tokens) 0)))
+    (setf (agent-q-session-metadata session)
+          (plist-put (plist-put meta
+                                :total-input-tokens (+ current-in input-tokens))
+                     :total-output-tokens (+ current-out output-tokens)))))
+
+;; Now load sessions module - structs are defined above
+(require 'sly-agent-q-sessions)
 
 ;;; Buffer-Local State
 
@@ -154,6 +187,11 @@ for visual clarity."
   "Face for debug/tool execution messages."
   :group 'agent-q-chat)
 
+(defface agent-q-system-message-face
+  '((t :foreground "#56b6c2" :slant italic))
+  "Face for system informational messages."
+  :group 'agent-q-chat)
+
 (defface agent-q-code-block-face
   '((((background dark))
      :background "#2c323c" :extend t)
@@ -208,9 +246,11 @@ Group 2: code content (without the fence markers)")
     (define-key map (kbd "C-c C-o") #'agent-q-scroll-to-bottom)
     (define-key map (kbd "q") #'agent-q--quit-or-self-insert)
 
-    ;; Session management (Phase 3 - define now, implement later)
+    ;; Session management (Phase 3)
     (define-key map (kbd "C-c C-s") #'agent-q-switch-session)
     (define-key map (kbd "C-c C-n") #'agent-q-new-session)
+    (define-key map (kbd "C-c C-f") #'agent-q-search-sessions)
+    (define-key map (kbd "C-c C-r") #'agent-q-name-session)
 
     ;; Context (Phase 4 - define now, implement later)
     (define-key map (kbd "C-c @") #'agent-q-add-context)
@@ -238,9 +278,18 @@ Group 2: code content (without the fence markers)")
      ["Clear Conversation" agent-q-clear-conversation
       :help "Clear the conversation and start fresh"]
      ["Scroll to Bottom" agent-q-scroll-to-bottom
-      :help "Scroll to the bottom of the chat"]
+      :help "Scroll to the bottom of the chat"])
+    ("Sessions"
      ["New Session" agent-q-new-session
-      :help "Start a new conversation session"])
+      :help "Start a new conversation session"]
+     ["Switch Session" agent-q-switch-session
+      :help "Switch to a different session"]
+     ["Search Sessions" agent-q-search-sessions
+      :help "Search past sessions by content"]
+     ["Name Session" agent-q-name-session
+      :help "Give current session a name"]
+     ["Delete Session" agent-q-delete-session
+      :help "Delete a saved session"])
     "---"
     ["Quit" quit-window
      :help "Close the chat window"]))
@@ -282,6 +331,15 @@ The buffer is divided into two regions:
 
   ;; Hooks
   (add-hook 'kill-buffer-hook #'agent-q--on-buffer-kill nil t)
+
+  ;; Advice quit-window to save session (catches C-x w q, menu quit, etc.)
+  (advice-add 'quit-window :before #'agent-q--before-quit-window)
+
+  ;; Initialize session management (auto-save, mode line)
+  (agent-q-sessions-initialize)
+
+  ;; Display current provider/model configuration
+  (agent-q--display-config-info)
 
   ;; Position menu before Help by adding to menu-bar-final-items
   ;; easy-menu-define converts "Agent-Q" to symbol 'agent-q
@@ -328,6 +386,36 @@ The buffer is divided into two regions:
     ;; so it stays at the START of user input as they type
     (setq agent-q--input-start-marker (point-marker))
     (set-marker-insertion-type agent-q--input-start-marker nil)))
+
+(defun agent-q--render-system-message (message)
+  "Render a system MESSAGE in the output region."
+  (save-excursion
+    (goto-char agent-q--output-end-marker)
+    (let ((inhibit-read-only t)
+          (start (point)))
+      (insert (propertize message 'face 'agent-q-system-message-face))
+      (insert "\n\n")
+      (put-text-property start (point) 'read-only t)
+      (set-marker agent-q--output-end-marker (point)))))
+
+(defun agent-q--display-config-info ()
+  "Fetch and display the current provider/model configuration."
+  (when (sly-connected-p)
+    (sly-eval-async '(agent-q:get-config-info)
+      (lambda (config)
+        (when config
+          (when-let ((buf (get-buffer agent-q-chat-buffer-name)))
+            (with-current-buffer buf
+              (if-let ((error-msg (plist-get config :error)))
+                  ;; Configuration failed - display error
+                  (agent-q--render-system-message
+                   (propertize (format "⚠ Configuration Error: %s" error-msg)
+                               'face '(:foreground "orange")))
+                ;; Configuration succeeded - display provider info
+                (let ((provider-name (or (plist-get config :provider-name) "Unknown"))
+                      (model (or (plist-get config :model) "unknown")))
+                  (agent-q--render-system-message
+                   (format "Using %s %s" provider-name model)))))))))))
 
 ;;; Input Handling
 
@@ -692,6 +780,28 @@ Only inserts if `agent-q-show-message-separators' is non-nil."
                           'face 'agent-q-message-separator-face
                           'read-only t)))))
 
+(defun agent-q--render-assistant-message (content)
+  "Render assistant message with CONTENT for session replay.
+Unlike streaming, this renders the complete message at once."
+  (save-excursion
+    (goto-char agent-q--output-end-marker)
+    (let ((inhibit-read-only t)
+          (start (point)))
+      (insert (propertize "[AGENT-Q]" 'face 'agent-q-assistant-header-face))
+      (insert " ")
+      (insert (propertize (format-time-string "%H:%M:%S")
+                          'face 'agent-q-timestamp-face))
+      (insert "\n")
+      (let ((content-start (point)))
+        (insert content)
+        (insert "\n\n")
+        ;; Apply markdown rendering
+        (agent-q--render-markdown content-start (point)))
+      ;; Insert separator
+      (agent-q--insert-message-separator)
+      (put-text-property start (point) 'read-only t)
+      (set-marker agent-q--output-end-marker (point)))))
+
 ;;; SLY Integration
 
 (defun agent-q--send-to-agent (content)
@@ -717,6 +827,23 @@ Called via `slynk:eval-in-emacs' for tool execution feedback."
     (with-current-buffer buf
       (agent-q--append-response-chunk
        (propertize (format "[%s]\n" msg) 'face 'agent-q-debug-face)))))
+
+(defun agent-q-chat-set-session-info (model provider input-tokens output-tokens)
+  "Update current session with MODEL, PROVIDER, and token counts.
+Called from Lisp side via `slynk:eval-in-emacs' after receiving LLM response."
+  (when-let ((buf (get-buffer agent-q-chat-buffer-name)))
+    (with-current-buffer buf
+      (when agent-q--current-session
+        ;; Set model if not already set
+        (unless (agent-q-session-model agent-q--current-session)
+          (agent-q-session-set-model agent-q--current-session model))
+        ;; Store provider in metadata
+        (when provider
+          (agent-q-session-update-metadata agent-q--current-session :provider provider))
+        ;; Accumulate token usage
+        (when (and input-tokens output-tokens)
+          (agent-q-session-add-tokens agent-q--current-session
+                                      input-tokens output-tokens))))))
 
 (defun agent-q--insert-tool-message (msg)
   "Insert tool MSG into the output region.
@@ -766,15 +893,26 @@ Called from diff and other tool modules."
   (interactive)
   (goto-char (point-max)))
 
+(defun agent-q--before-quit-window (&optional kill window)
+  "Advice for `quit-window' to save session when quitting chat buffer.
+KILL and WINDOW are the arguments to `quit-window'."
+  (when (and (eq major-mode 'agent-q-chat-mode)
+             (boundp 'agent-q--current-session)
+             agent-q--current-session)
+    (agent-q--save-current-session)))
+
 (defun agent-q--quit-or-self-insert ()
   "Quit window if in output region, otherwise insert `q'."
   (interactive)
   (if (agent-q--in-input-region-p)
       (self-insert-command 1)
+    ;; quit-window will trigger our advice which saves the session
     (quit-window)))
 
 (defun agent-q--on-buffer-kill ()
   "Clean up when the chat buffer is killed."
+  ;; Save session before cleanup
+  (agent-q--on-chat-buffer-kill)
   ;; Cancel any pending requests
   (when agent-q--pending-response
     (setq agent-q--pending-response nil))
@@ -787,18 +925,6 @@ Called from diff and other tool modules."
     (set-marker agent-q--streaming-marker nil)))
 
 ;;; Placeholder Commands (to be implemented in later phases)
-
-(defun agent-q-switch-session ()
-  "Switch to a different conversation session.
-This will be implemented in Phase 3."
-  (interactive)
-  (message "Session switching will be available in Phase 3"))
-
-(defun agent-q-new-session ()
-  "Start a new conversation session.
-This will be implemented in Phase 3."
-  (interactive)
-  (agent-q-clear-conversation))
 
 (defun agent-q-add-context ()
   "Add context to the conversation.
