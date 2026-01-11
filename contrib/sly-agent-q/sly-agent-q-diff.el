@@ -25,6 +25,10 @@
 (require 'diff-mode)
 (require 'cl-lib)
 
+;; Forward declaration for chat integration
+(declare-function agent-q-chat-tool-start "sly-agent-q-chat" (tool-name &optional details))
+(declare-function agent-q-chat-tool-result "sly-agent-q-chat" (tool-name result))
+
 ;;; Customization
 
 (defgroup sly-agent-q-diff nil
@@ -214,6 +218,11 @@ Returns 'accepted if user accepts, 'rejected otherwise."
         ;; Update header with initial hunk count
         (sly-agent-q-diff--update-header)))
 
+    ;; Notify chat that diff review is starting
+    (when (fboundp 'agent-q-chat-tool-start)
+      (agent-q-chat-tool-start "propose_file_edit"
+                               (format "reviewing changes to %s..." (file-name-nondirectory abs-path))))
+
     ;; Display buffer and switch to it
     (pop-to-buffer diff-buffer)
 
@@ -235,6 +244,14 @@ Returns 'accepted if user accepts, 'rejected otherwise."
       ;; Clean up the buffer if still alive
       (when (buffer-live-p diff-buffer)
         (kill-buffer diff-buffer))
+
+      ;; Notify chat of result
+      (when (fboundp 'agent-q-chat-tool-result)
+        (agent-q-chat-tool-result "propose_file_edit"
+                                  (if (eq decision 'accepted)
+                                      "changes applied"
+                                    "changes rejected")))
+
       (if (eq decision 'accepted)
           "accepted"
         "rejected"))))
@@ -335,11 +352,32 @@ Returns the diff as a string."
 
 ;;; Per-hunk commands
 
+(defun sly-agent-q-diff--at-hunk-p ()
+  "Return non-nil if point is inside a valid diff hunk."
+  (save-excursion
+    (condition-case nil
+        (progn (diff-beginning-of-hunk) t)
+      (error nil))))
+
+(defun sly-agent-q-diff--goto-first-hunk ()
+  "Move to the first hunk in the diff buffer.
+Returns t if a hunk was found, nil otherwise."
+  (goto-char (point-min))
+  (when (re-search-forward "^@@" nil t)
+    (beginning-of-line)
+    t))
+
 (defun sly-agent-q-diff-accept-hunk ()
   "Accept and apply the current hunk."
   (interactive)
   (unless (derived-mode-p 'sly-agent-q-diff-mode)
     (user-error "Not in Agent-Q diff buffer"))
+
+  ;; Ensure we're at a valid hunk
+  (unless (sly-agent-q-diff--at-hunk-p)
+    (if (sly-agent-q-diff--goto-first-hunk)
+        (message "Moved to first hunk")
+      (user-error "No hunks found in this diff")))
 
   (save-excursion
     (diff-beginning-of-hunk)
@@ -370,6 +408,12 @@ Returns the diff as a string."
   (interactive)
   (unless (derived-mode-p 'sly-agent-q-diff-mode)
     (user-error "Not in Agent-Q diff buffer"))
+
+  ;; Ensure we're at a valid hunk
+  (unless (sly-agent-q-diff--at-hunk-p)
+    (if (sly-agent-q-diff--goto-first-hunk)
+        (message "Moved to first hunk")
+      (user-error "No hunks found in this diff")))
 
   (save-excursion
     (diff-beginning-of-hunk)

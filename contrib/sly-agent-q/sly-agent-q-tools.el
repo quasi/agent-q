@@ -42,8 +42,9 @@
 ;;; Helper functions
 
 (defun sly-agent-q-tools--get-conversation-buffer ()
-  "Return the Agent-Q conversation buffer, or nil if not found."
-  (get-buffer "*sly-agent-q*"))
+  "Return the Agent-Q conversation buffer, or nil if not found.
+Uses the new chat buffer name."
+  (get-buffer "*Agent-Q Chat*"))
 
 ;;; Logging functions
 
@@ -57,17 +58,23 @@ RESULT is the tool execution result."
     (let ((buffer (sly-agent-q-tools--get-conversation-buffer)))
       (when (buffer-live-p buffer)
         (with-current-buffer buffer
-          (let ((inhibit-read-only t))
-            (save-excursion
-              (goto-char (point-max))
-              (insert "\n")
-              (insert (propertize (format "[TOOL: %s]\n" tool-name)
-                                 'face 'sly-agent-q-tools-tool-name))
-              (when args
-                (insert (propertize (format "Args: %s\n" args)
-                                   'face 'sly-agent-q-tools-result)))
-              (insert (propertize (format "→ %s\n" result)
-                                 'face 'sly-agent-q-tools-result)))))))))
+          ;; Use the streaming marker if available, otherwise append to output region
+          (let ((text (concat
+                       (propertize (format "[TOOL: %s]\n" tool-name)
+                                   'face 'sly-agent-q-tools-tool-name)
+                       (when args
+                         (propertize (format "Args: %s\n" args)
+                                     'face 'sly-agent-q-tools-result))
+                       (propertize (format "→ %s\n" result)
+                                   'face 'sly-agent-q-tools-result))))
+            (if (and (boundp 'agent-q--streaming-marker) agent-q--streaming-marker)
+                (agent-q--append-response-chunk text)
+              ;; Fallback: insert at output end marker
+              (when (and (boundp 'agent-q--output-end-marker) agent-q--output-end-marker)
+                (save-excursion
+                  (goto-char agent-q--output-end-marker)
+                  (let ((inhibit-read-only t))
+                    (insert text)))))))))))
 
 (defun sly-agent-q-tools--log-tool-call (tool-name)
   "Log that TOOL-NAME is being executed."
@@ -75,12 +82,15 @@ RESULT is the tool execution result."
     (let ((buffer (sly-agent-q-tools--get-conversation-buffer)))
       (when (buffer-live-p buffer)
         (with-current-buffer buffer
-          (let ((inhibit-read-only t))
-            (save-excursion
-              (goto-char (point-max))
-              (insert "\n")
-              (insert (propertize (format "[TOOL: %s] executing...\n" tool-name)
-                                 'face 'sly-agent-q-tools-tool-name)))))))))
+          (let ((text (propertize (format "[TOOL: %s] executing...\n" tool-name)
+                                  'face 'sly-agent-q-tools-tool-name)))
+            (if (and (boundp 'agent-q--streaming-marker) agent-q--streaming-marker)
+                (agent-q--append-response-chunk text)
+              (when (and (boundp 'agent-q--output-end-marker) agent-q--output-end-marker)
+                (save-excursion
+                  (goto-char agent-q--output-end-marker)
+                  (let ((inhibit-read-only t))
+                    (insert text)))))))))))
 
 (defun sly-agent-q-tools--log-tool-result (result)
   "Log tool RESULT to conversation buffer."
@@ -88,11 +98,15 @@ RESULT is the tool execution result."
     (let ((buffer (sly-agent-q-tools--get-conversation-buffer)))
       (when (buffer-live-p buffer)
         (with-current-buffer buffer
-          (let ((inhibit-read-only t))
-            (save-excursion
-              (goto-char (point-max))
-              (insert (propertize (format "→ %s\n" result)
-                                 'face 'sly-agent-q-tools-result)))))))))
+          (let ((text (propertize (format "→ %s\n" result)
+                                  'face 'sly-agent-q-tools-result)))
+            (if (and (boundp 'agent-q--streaming-marker) agent-q--streaming-marker)
+                (agent-q--append-response-chunk text)
+              (when (and (boundp 'agent-q--output-end-marker) agent-q--output-end-marker)
+                (save-excursion
+                  (goto-char agent-q--output-end-marker)
+                  (let ((inhibit-read-only t))
+                    (insert text)))))))))))
 
 (provide 'sly-agent-q-tools)
 ;;; sly-agent-q-tools.el ends here

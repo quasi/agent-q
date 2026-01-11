@@ -19,6 +19,7 @@
 (require 'sly)
 (require 'sly-agent-q-diff)
 (require 'sly-agent-q-tools)
+(require 'sly-agent-q-chat)
 
 ;; Enable eval-in-emacs for Agent-Q to send debug messages in real-time
 (setq sly-enable-evaluate-in-emacs t)
@@ -36,7 +37,8 @@
   :group 'sly-agent-q)
 
 (defcustom sly-agent-q-conversation-buffer-name "*Agent-Q*"
-  "Name of the conversation buffer."
+  "Name of the old conversation buffer.
+DEPRECATED: The new chat buffer name is `agent-q-chat-buffer-name'."
   :type 'string
   :group 'sly-agent-q)
 
@@ -95,66 +97,29 @@ Returns t if loaded, nil otherwise."
     (message "Agent-Q not loaded. Load it with: (asdf:load-system :agent-q)")
     nil))
 
-;;; Conversation Buffer Mode
-
-(defvar sly-agent-q-conversation-mode-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "q") #'quit-window)
-    (define-key map (kbd "n") #'sly-agent-q-new-conversation)
-    (define-key map (kbd "C-c C-c") #'sly-agent-q-send)
-    map)
-  "Keymap for Agent-Q conversation buffer.")
-
-(define-derived-mode sly-agent-q-conversation-mode special-mode "Agent-Q"
-  "Major mode for Agent-Q conversation buffer.
-
-\\{sly-agent-q-conversation-mode-map}"
-  (setq-local buffer-read-only t)
-  (setq-local truncate-lines nil)
-  (setq-local word-wrap t))
-
-(defun sly-agent-q--get-conversation-buffer ()
-  "Get or create the Agent-Q conversation buffer."
-  (let ((buffer (get-buffer-create sly-agent-q-conversation-buffer-name)))
-    (with-current-buffer buffer
-      (unless (eq major-mode 'sly-agent-q-conversation-mode)
-        (sly-agent-q-conversation-mode)
-        (let ((inhibit-read-only t))
-          (erase-buffer)
-          (insert (propertize "=== Agent-Q Conversation ===\n"
-                             'face 'bold)
-                  (propertize "Press 'q' to hide, 'n' for new conversation\n\n"
-                             'face 'font-lock-comment-face)))))
-    buffer))
-
-(defun sly-agent-q--display-conversation-buffer ()
-  "Display the Agent-Q conversation buffer."
-  (let ((buffer (sly-agent-q--get-conversation-buffer)))
-    (display-buffer buffer)
-    buffer))
+;;; Legacy Conversation Buffer Support (Deprecated)
+;;
+;; The old *Agent-Q* buffer is deprecated in favor of *Agent-Q Chat*.
+;; These variables and functions remain for backward compatibility but
+;; will be removed in a future version.
 
 (defun sly-agent-q--append-to-conversation (role content)
-  "Append a message with ROLE and CONTENT to the conversation buffer."
-  (let ((buffer (sly-agent-q--get-conversation-buffer))
-        (inhibit-read-only t))
-    (with-current-buffer buffer
-      (goto-char (point-max))
-      (let ((face (pcase role
-                    ('user 'sly-agent-q-user-face)
-                    ('assistant 'sly-agent-q-assistant-face)
-                    ('debug 'sly-agent-q-debug-face)
-                    (_ 'default))))
-        ;; For debug messages, don't show the [DEBUG] header, just indent the content
-        (if (eq role 'debug)
-            (insert (propertize (format "  %s\n" content)
-                               'face face))
-          (progn
-            ;; Show [AGENT-Q] instead of [ASSISTANT] for assistant role
-            (let ((role-label (if (eq role 'assistant) "AGENT-Q" (upcase (symbol-name role)))))
-              (insert (propertize (format "\n[%s]\n" role-label)
-                                 'face face)))
-            (insert content "\n"))))
-      (goto-char (point-max)))))
+  "Append a message with ROLE and CONTENT to the chat buffer.
+DEPRECATED: Use the new chat interface directly.
+
+This remains for backward compatibility with code that may call it."
+  (when-let ((buf (get-buffer agent-q-chat-buffer-name)))
+    (with-current-buffer buf
+      (pcase role
+        ('debug
+         (agent-q--append-response-chunk
+          (propertize (format "  %s\n" content) 'face 'agent-q-debug-face)))
+        ('assistant
+         (agent-q--append-response-chunk content))
+        ('user
+         (agent-q--render-user-message content))
+        (_
+         (agent-q--append-response-chunk content))))))
 
 ;;; Context Commands
 
@@ -218,55 +183,22 @@ Returns t if loaded, nil otherwise."
 
 ;;;###autoload
 (defun sly-agent-q-send (message)
-  "Send MESSAGE to the agent."
+  "Send MESSAGE to the agent via the chat interface."
   (interactive "sMessage to Agent-Q: ")
   (when (sly-agent-q--check-loaded)
-    (sly-agent-q--append-to-conversation 'user message)
-    (sly-agent-q--display-conversation-buffer)
-    (message "Sending to Agent-Q...")
-    (sly-eval-async
-        `(agent-q:agent-q-send ,message :include-context nil)
-      (lambda (response)
-        (if (stringp response)
-            (progn
-              (setq sly-agent-q--last-response response)
-              ;; Debug messages appear in real-time during execution
-              ;; Just append the final response
-              (sly-agent-q--append-to-conversation 'assistant response)
-              (message "Agent-Q response received"))
-          ;; Debug: unexpected response type
-          (message "ERROR: Expected string, got %s: %S" (type-of response) response)
-          (sly-agent-q--append-to-conversation
-           'assistant
-           (format "ERROR: Unexpected response type: %s\nValue: %S"
-                   (type-of response) response)))))))
+    (agent-q-chat-send-message message nil)))
 
 ;;;###autoload
 (defun sly-agent-q-send-with-context (message)
-  "Send MESSAGE to the agent with accumulated context."
+  "Send MESSAGE to the agent with accumulated context via the chat interface."
   (interactive "sMessage to Agent-Q (with context): ")
   (when (sly-agent-q--check-loaded)
-    (sly-agent-q--append-to-conversation 'user message)
-    (sly-agent-q--display-conversation-buffer)
-    (message "Sending to Agent-Q with context...")
-    (sly-eval-async
-        `(agent-q:agent-q-send ,message :include-context t)
-      (lambda (response)
-        (if (stringp response)
-            (progn
-              (setq sly-agent-q--last-response response)
-              (sly-agent-q--append-to-conversation 'assistant response)
-              (message "Agent-Q response received"))
-          ;; Debug: unexpected response type
-          (message "ERROR: Expected string, got %s: %S" (type-of response) response)
-          (sly-agent-q--append-to-conversation
-           'assistant
-           (format "ERROR: Unexpected response type: %s\nValue: %S"
-                   (type-of response) response)))))))
+    (agent-q-chat-send-message message t)))
 
 ;;;###autoload
 (defun sly-agent-q-send-region-with-instruction (start end instruction)
-  "Send region with an instruction. Adds region to context first."
+  "Send region with an instruction. Adds region to context first.
+Uses the new chat interface for display."
   (interactive "r\nsInstruction: ")
   (when (sly-agent-q--check-loaded)
     (let* ((content (buffer-substring-no-properties start end))
@@ -276,45 +208,37 @@ Returns t if loaded, nil otherwise."
            (metadata (list :filename filename
                           :start-line start-line
                           :end-line end-line)))
-      (sly-agent-q--append-to-conversation 'user instruction)
-      (sly-agent-q--display-conversation-buffer)
       (message "Adding context and sending to Agent-Q...")
-      ;; Add to context, then send
+      ;; Add to context, then send via chat interface
       (sly-eval-async
           `(agent-q:agent-q-add-context ,content
                                         :type :code
                                         :metadata ',metadata)
         (lambda (result)
-          (sly-eval-async
-              `(agent-q:agent-q-send ,instruction :include-context t)
-            (lambda (response)
-              (setq sly-agent-q--last-response response)
-              (sly-agent-q--append-to-conversation 'assistant response)
-              (message "Agent-Q response received"))))))))
+          ;; Use the chat interface for display and response handling
+          (agent-q-chat-send-message instruction t))))))
 
 ;;;###autoload
 (defun sly-agent-q-new-conversation ()
-  "Start a new conversation."
+  "Start a new conversation via the chat interface."
   (interactive)
   (when (sly-agent-q--check-loaded)
     (sly-eval-async
         '(agent-q:agent-q-new-conversation)
       (lambda (result)
-        (let ((buffer (sly-agent-q--get-conversation-buffer))
-              (inhibit-read-only t))
-          (with-current-buffer buffer
-            (erase-buffer)
-            (insert (propertize "=== New Agent-Q Conversation ===\n"
-                               'face 'bold)
-                    (propertize "Press 'q' to hide, 'n' for new conversation\n\n"
-                               'face 'font-lock-comment-face)))
-          (message "Started new Agent-Q conversation"))))))
+        ;; Clear the chat buffer without confirmation (programmatic clear)
+        (when-let ((buf (get-buffer agent-q-chat-buffer-name)))
+          (with-current-buffer buf
+            (setq agent-q--current-session (agent-q-session--create))
+            (agent-q--setup-buffer-layout)))
+        (message "Started new Agent-Q conversation")))))
 
 ;;;###autoload
 (defun sly-agent-q-show-conversation ()
-  "Show/switch to the conversation buffer."
+  "Show/switch to the conversation buffer.
+Uses the new interactive chat interface."
   (interactive)
-  (switch-to-buffer (sly-agent-q--get-conversation-buffer)))
+  (agent-q-chat))
 
 ;;; Response Handling
 
@@ -360,15 +284,16 @@ Returns t if loaded, nil otherwise."
 
 ;;;###autoload
 (defun sly-agent-q-fix-error ()
-  "Send recent error to agent and ask for fix."
+  "Send recent error to agent and ask for fix via the chat interface."
   (interactive)
   (when (sly-agent-q--check-loaded)
     (let ((error-msg (sly-eval '(cl:princ-to-string (swank:backtrace 0 10)))))
       (sly-eval-async
           `(agent-q:agent-q-add-context ,error-msg :type :error)
         (lambda (result)
-          (sly-agent-q-send-with-context
-           "I encountered this error. What's wrong and how do I fix it?"))))))
+          ;; Use chat interface
+          (agent-q-chat-send-message
+           "I encountered this error. What's wrong and how do I fix it?" t))))))
 
 ;;; Keymap
 
@@ -460,7 +385,13 @@ Returns t if loaded, nil otherwise."
   :keymap sly-agent-q-mode-map
   :group 'sly-agent-q
   (if sly-agent-q-mode
-      (easy-menu-add sly-agent-q-menu)
+      (progn
+        (easy-menu-add sly-agent-q-menu)
+        ;; Position menu before Help by adding to menu-bar-final-items
+        ;; easy-menu-define converts "Agent-Q" to symbol 'agent-q
+        (unless (memq 'agent-q menu-bar-final-items)
+          (setq menu-bar-final-items
+                (cons 'agent-q (delq 'agent-q menu-bar-final-items)))))
     (easy-menu-remove sly-agent-q-menu)))
 
 ;;; Auto-load agent-q on connection
