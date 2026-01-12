@@ -195,5 +195,43 @@
     (should (= 2 (length alpha-result)))
     (should (= 1 (length beta-result)))))
 
+;;;; Task 4: Buffer Candidates
+
+(ert-deftest agent-q-context/candidates/buffer-returns-list ()
+  "Test that buffer candidates returns a list."
+  (let ((candidates (agent-q--buffer-candidates "")))
+    (should (listp candidates))))
+
+(ert-deftest agent-q-context/candidates/buffer-excludes-internal ()
+  "Test that internal buffers (starting with space) are excluded."
+  (let ((candidates (agent-q--buffer-candidates "")))
+    (should-not (cl-some (lambda (c) (string-prefix-p " " c))
+                         candidates))))
+
+(ert-deftest agent-q-context/candidates/buffer-filters-by-prefix ()
+  "Test that buffer candidates filter by prefix."
+  (with-temp-buffer
+    (rename-buffer "agent-q-test-buffer-xyz" t)
+    (unwind-protect
+        (let ((candidates (agent-q--buffer-candidates "agent-q-test")))
+          (should (cl-some (lambda (c)
+                             (string= "agent-q-test-buffer-xyz" c))
+                           candidates)))
+      (kill-buffer "agent-q-test-buffer-xyz"))))
+
+(ert-deftest agent-q-context/candidates/buffer-has-properties ()
+  "Test that buffer candidates have required text properties."
+  (with-temp-buffer
+    (rename-buffer "agent-q-prop-test" t)
+    (unwind-protect
+        (let* ((candidates (agent-q--buffer-candidates "agent-q-prop"))
+               (candidate (car candidates)))
+          (should candidate)
+          (should (eq :buffer (get-text-property 0 'agent-q-context-type candidate)))
+          (should (string= "agent-q-prop-test"
+                          (plist-get (get-text-property 0 'agent-q-context-data candidate)
+                                     :buffer-name))))
+      (kill-buffer "agent-q-prop-test"))))
+
 (provide 'sly-agent-q-context-test)
 ;;; sly-agent-q-context-test.el ends here

@@ -93,5 +93,20 @@ overwhelming completion interfaces."
                                    (agent-q--flatten-imenu index prefix))))))))
     (seq-take symbols 50)))
 
+(defun agent-q--buffer-candidates (prefix)
+  "Return buffer candidates matching PREFIX.
+Excludes internal buffers (those starting with space).
+Each candidate has `agent-q-context-type' set to :buffer and
+`agent-q-context-data' containing :buffer-name for later content fetching."
+  (mapcar (lambda (buf)
+            (propertize (buffer-name buf)
+                        'agent-q-context-type :buffer
+                        'agent-q-context-data (list :buffer-name (buffer-name buf))))
+          (seq-filter (lambda (buf)
+                        (let ((name (buffer-name buf)))
+                          (and (not (string-prefix-p " " name))
+                               (string-prefix-p prefix name t))))
+                      (buffer-list))))
+
 (provide 'sly-agent-q-context)
 ;;; sly-agent-q-context.el ends here
