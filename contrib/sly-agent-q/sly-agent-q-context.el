@@ -28,6 +28,13 @@
 (require 'seq)
 (require 'imenu)
 
+;;; Constants
+
+(defconst agent-q-context-max-size 50000
+  "Maximum size in bytes for context content.
+Content larger than this will be truncated to prevent LLM context
+window overflow.")
+
 ;;; Data Structures
 
 (cl-defstruct (agent-q-context-item (:constructor make-agent-q-context-item))
@@ -161,6 +168,52 @@ the current line."
           ;; Only return bounds if point is within or immediately after the match
           (when (<= original-point match-end)
             (cons match-start match-end)))))))
+
+;;; Content Fetching
+
+(defun agent-q--fetch-context-content (type data)
+  "Fetch actual content for context item.
+TYPE is the context type (:file, :buffer, :symbol, :region).
+DATA is the type-specific data plist.
+
+Returns the content string limited to `agent-q-context-max-size',
+or nil if the source cannot be read."
+  (pcase type
+    (:file
+     (let ((path (plist-get data :path)))
+       (when (and path (file-readable-p path))
+         (with-temp-buffer
+           (insert-file-contents path nil 0 agent-q-context-max-size)
+           (buffer-string)))))
+    (:symbol
+     (when-let* ((pos (plist-get data :position))
+                 (buf (and (markerp pos) (marker-buffer pos))))
+       (with-current-buffer buf
+         (save-excursion
+           (goto-char pos)
+           (let ((bounds (bounds-of-thing-at-point 'defun)))
+             (when bounds
+               (buffer-substring-no-properties
+                (car bounds)
+                (min (cdr bounds)
+                     (+ (car bounds) agent-q-context-max-size)))))))))
+    (:buffer
+     (when-let ((buf (get-buffer (plist-get data :buffer-name))))
+       (with-current-buffer buf
+         (buffer-substring-no-properties
+          (point-min)
+          (min (point-max)
+               (+ (point-min) agent-q-context-max-size))))))
+    (:region
+     (let ((buf (get-buffer (plist-get data :buffer)))
+           (start (plist-get data :start))
+           (end (plist-get data :end)))
+       (when (and buf start end)
+         (with-current-buffer buf
+           (buffer-substring-no-properties
+            start
+            (min end (+ start agent-q-context-max-size)))))))
+    (_ nil)))
 
 (provide 'sly-agent-q-context)
 ;;; sly-agent-q-context.el ends here

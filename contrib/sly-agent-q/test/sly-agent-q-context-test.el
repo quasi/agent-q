@@ -378,5 +378,101 @@
   (let ((candidate "plain-string"))
     (should (string= "" (agent-q--context-annotation candidate)))))
 
+;;;; Task 7: Content Fetching
+
+(ert-deftest agent-q-context/fetch/file-content ()
+  "Test fetching file content."
+  (let* ((temp-file (make-temp-file "agent-q-fetch-test"))
+         (content "Test file content"))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file
+            (insert content))
+          (let ((fetched (agent-q--fetch-context-content
+                         :file (list :path temp-file))))
+            (should (string= content fetched))))
+      (delete-file temp-file))))
+
+(ert-deftest agent-q-context/fetch/file-limits-size ()
+  "Test that file content is limited to 50KB."
+  (let ((temp-file (make-temp-file "agent-q-size-test")))
+    (unwind-protect
+        (progn
+          ;; Write 100KB of data
+          (with-temp-file temp-file
+            (dotimes (_ 10000)
+              (insert "1234567890")))
+          (let ((fetched (agent-q--fetch-context-content
+                         :file (list :path temp-file))))
+            (should (<= (length fetched) agent-q-context-max-size))))
+      (delete-file temp-file))))
+
+(ert-deftest agent-q-context/fetch/buffer-content ()
+  "Test fetching buffer content."
+  (with-temp-buffer
+    (rename-buffer "agent-q-fetch-buf-test" t)
+    (insert "Buffer test content")
+    (unwind-protect
+        (let ((fetched (agent-q--fetch-context-content
+                       :buffer (list :buffer-name "agent-q-fetch-buf-test"))))
+          (should (string= "Buffer test content" fetched)))
+      (kill-buffer "agent-q-fetch-buf-test"))))
+
+(ert-deftest agent-q-context/fetch/buffer-limits-size ()
+  "Test that buffer content is limited to 50KB."
+  (with-temp-buffer
+    (rename-buffer "agent-q-size-buf-test" t)
+    (dotimes (_ 10000)
+      (insert "1234567890"))
+    (unwind-protect
+        (let ((fetched (agent-q--fetch-context-content
+                       :buffer (list :buffer-name "agent-q-size-buf-test"))))
+          (should (<= (length fetched) agent-q-context-max-size)))
+      (kill-buffer "agent-q-size-buf-test"))))
+
+(ert-deftest agent-q-context/fetch/nonexistent-returns-nil ()
+  "Test that fetching nonexistent content returns nil."
+  (should-not (agent-q--fetch-context-content
+               :file (list :path "/nonexistent/path/file.txt")))
+  (should-not (agent-q--fetch-context-content
+               :buffer (list :buffer-name "nonexistent-buffer-xyz"))))
+
+(ert-deftest agent-q-context/fetch/symbol-content ()
+  "Test fetching symbol definition content."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun agent-q-fetch-sym-test ()\n  \"Test function.\"\n  42)\n")
+    (goto-char (point-min))
+    ;; Create a marker at the function position
+    (let* ((pos (point-marker))
+           (fetched (agent-q--fetch-context-content
+                    :symbol (list :name "agent-q-fetch-sym-test"
+                                  :position pos))))
+      (should fetched)
+      (should (string-match-p "defun agent-q-fetch-sym-test" fetched)))))
+
+(ert-deftest agent-q-context/fetch/region-content ()
+  "Test fetching region content."
+  (with-temp-buffer
+    (rename-buffer "agent-q-region-fetch-test" t)
+    (insert "line 1\nselected text\nline 3")
+    (unwind-protect
+        (let ((fetched (agent-q--fetch-context-content
+                       :region (list :buffer "agent-q-region-fetch-test"
+                                     :start 8
+                                     :end 21))))
+          (should (string= "selected text" fetched)))
+      (kill-buffer "agent-q-region-fetch-test"))))
+
+(ert-deftest agent-q-context/fetch/unknown-type-returns-nil ()
+  "Test that unknown content type returns nil."
+  (should-not (agent-q--fetch-context-content
+               :unknown (list :foo "bar"))))
+
+(ert-deftest agent-q-context/max-size-constant ()
+  "Test that max size constant is defined as 50000."
+  (should (boundp 'agent-q-context-max-size))
+  (should (= 50000 agent-q-context-max-size)))
+
 (provide 'sly-agent-q-context-test)
 ;;; sly-agent-q-context-test.el ends here
