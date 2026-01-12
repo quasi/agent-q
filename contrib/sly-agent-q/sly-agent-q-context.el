@@ -46,12 +46,28 @@
 Used to highlight [@name] pills that represent attached context items."
   :group 'agent-q-context)
 
+(defface agent-q-context-button-face
+  '((t :foreground "#98c379" :weight bold))
+  "Face for clickable buttons in context panel."
+  :group 'agent-q-context)
+
 ;;; Constants
 
 (defconst agent-q-context-max-size 50000
   "Maximum size in bytes for context content.
 Content larger than this will be truncated to prevent LLM context
 window overflow.")
+
+;;; Buffer-Local State
+
+(defvar-local agent-q-context-items nil
+  "List of context items attached to current message.
+Each item is an `agent-q-context-item' struct.")
+
+;;; Context Panel
+
+(defvar agent-q-context-panel-buffer "*Agent-Q Context*"
+  "Buffer name for context panel sidebar.")
 
 ;;; Data Structures
 
@@ -317,6 +333,122 @@ EVENT is the mouse event."
   (if-let ((item (get-text-property (point) 'agent-q-context-item)))
       (message "%s" (agent-q--context-pill-tooltip item))
     (message "No context item at point")))
+
+;;; Context Panel Mode
+
+(define-derived-mode agent-q-context-panel-mode special-mode "Context"
+  "Major mode for Agent-Q context panel.
+Displays attached context items with actions."
+  :group 'agent-q-context
+  (setq-local revert-buffer-function #'agent-q--refresh-context-panel))
+
+(defun agent-q--refresh-context-panel (&rest _args)
+  "Refresh context panel contents.
+ARGS are ignored; this function can be used as `revert-buffer-function'."
+  (let ((inhibit-read-only t)
+        (items (when-let ((chat-buf (get-buffer "*Agent-Q Chat*")))
+                 (buffer-local-value 'agent-q-context-items chat-buf))))
+    (erase-buffer)
+    (insert (propertize "Context Items\n" 'face 'bold))
+    (insert (propertize (make-string 30 ?─) 'face 'shadow))
+    (insert "\n\n")
+
+    (if items
+        (dolist (item items)
+          (agent-q--insert-context-panel-item item))
+      (insert (propertize "No context attached.\n\n" 'face 'shadow)
+              "Use @filename to add files,\n"
+              "or C-c @ to add interactively."))
+
+    (insert "\n\n")
+    (insert-button "[Clear All]"
+                   'action (lambda (_btn)
+                             (agent-q--clear-all-context)
+                             (agent-q--refresh-context-panel))
+                   'face 'agent-q-context-button-face
+                   'help-echo "Remove all context items")))
+
+(defun agent-q--insert-context-panel-item (item)
+  "Insert ITEM in context panel with visit and remove buttons."
+  (let ((type (agent-q-context-item-type item))
+        (name (agent-q-context-item-display-name item)))
+    ;; Type label
+    (insert (propertize (format "[%s] "
+                                (pcase type
+                                  (:file "FILE")
+                                  (:symbol "SYM")
+                                  (:buffer "BUF")
+                                  (:region "REG")
+                                  (:url "URL")
+                                  (_ "?")))
+                        'face 'font-lock-type-face))
+    ;; Clickable name
+    (insert-button name
+                   'action (lambda (_btn) (agent-q--visit-context-item item))
+                   'face 'link
+                   'help-echo "Click to visit source")
+    (insert "  ")
+    ;; Remove button
+    (insert-button "×"
+                   'action (lambda (_btn)
+                             (agent-q--remove-context-item item)
+                             (agent-q--refresh-context-panel))
+                   'face 'error
+                   'help-echo "Remove from context")
+    (insert "\n")))
+
+(defun agent-q--visit-context-item (item)
+  "Visit the source of context ITEM."
+  (let ((type (agent-q-context-item-type item))
+        (data (agent-q-context-item-data item)))
+    (pcase type
+      (:file (when-let ((path (plist-get data :path)))
+               (find-file path)))
+      (:buffer (when-let ((buf (plist-get data :buffer-name)))
+                 (switch-to-buffer buf)))
+      (:symbol (when-let ((pos (plist-get data :position)))
+                 (when (markerp pos)
+                   (switch-to-buffer (marker-buffer pos))
+                   (goto-char pos))))
+      (:region (when-let ((buf (get-buffer (plist-get data :buffer))))
+                 (switch-to-buffer buf)
+                 (when-let ((start (plist-get data :start)))
+                   (goto-char start))))
+      (_ (message "Cannot visit this context type")))))
+
+(defun agent-q--remove-context-item (item)
+  "Remove ITEM from context list in the chat buffer."
+  (when-let ((chat-buf (get-buffer "*Agent-Q Chat*")))
+    (with-current-buffer chat-buf
+      (setq agent-q-context-items
+            (delete item agent-q-context-items)))))
+
+(defun agent-q--clear-all-context ()
+  "Clear all context items from the chat buffer."
+  (when-let ((chat-buf (get-buffer "*Agent-Q Chat*")))
+    (with-current-buffer chat-buf
+      (setq agent-q-context-items nil))))
+
+(defun agent-q-show-context-panel ()
+  "Show context panel in side window."
+  (interactive)
+  (let ((buf (get-buffer-create agent-q-context-panel-buffer)))
+    (with-current-buffer buf
+      (agent-q-context-panel-mode)
+      (agent-q--refresh-context-panel))
+    (display-buffer buf
+                    '(display-buffer-in-side-window
+                      (side . right)
+                      (window-width . 35)
+                      (preserve-size . (t . nil))))))
+
+(defun agent-q-toggle-context-panel ()
+  "Toggle context panel sidebar visibility."
+  (interactive)
+  (let ((win (get-buffer-window agent-q-context-panel-buffer)))
+    (if win
+        (delete-window win)
+      (agent-q-show-context-panel))))
 
 (provide 'sly-agent-q-context)
 ;;; sly-agent-q-context.el ends here

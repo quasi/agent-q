@@ -610,5 +610,141 @@
       ;; The describe function should not error and should return something
       (should (agent-q--context-pill-tooltip item)))))
 
+;;;; Task 9: Context Panel
+
+(ert-deftest agent-q-context/panel/creates-buffer ()
+  "Test that context panel creates a buffer."
+  (unwind-protect
+      (progn
+        (agent-q-show-context-panel)
+        (should (get-buffer "*Agent-Q Context*")))
+    (when (get-buffer "*Agent-Q Context*")
+      (kill-buffer "*Agent-Q Context*"))))
+
+(ert-deftest agent-q-context/panel/shows-empty-message ()
+  "Test that panel shows message when no context."
+  (let ((agent-q-context-items nil))
+    (unwind-protect
+        (progn
+          (agent-q-show-context-panel)
+          (with-current-buffer "*Agent-Q Context*"
+            (goto-char (point-min))
+            (should (search-forward "No context" nil t))))
+      (when (get-buffer "*Agent-Q Context*")
+        (kill-buffer "*Agent-Q Context*")))))
+
+(ert-deftest agent-q-context/panel/toggle-works ()
+  "Test toggling context panel."
+  (unwind-protect
+      (progn
+        ;; First toggle shows
+        (agent-q-toggle-context-panel)
+        (should (get-buffer-window "*Agent-Q Context*"))
+        ;; Second toggle hides
+        (agent-q-toggle-context-panel)
+        (should-not (get-buffer-window "*Agent-Q Context*")))
+    (when (get-buffer "*Agent-Q Context*")
+      (kill-buffer "*Agent-Q Context*"))))
+
+(ert-deftest agent-q-context/panel/has-correct-mode ()
+  "Test that panel buffer has correct major mode."
+  (unwind-protect
+      (progn
+        (agent-q-show-context-panel)
+        (with-current-buffer "*Agent-Q Context*"
+          (should (eq major-mode 'agent-q-context-panel-mode))))
+    (when (get-buffer "*Agent-Q Context*")
+      (kill-buffer "*Agent-Q Context*"))))
+
+(ert-deftest agent-q-context/panel/buffer-name-variable ()
+  "Test that buffer name variable is defined."
+  (should (boundp 'agent-q-context-panel-buffer))
+  (should (stringp agent-q-context-panel-buffer))
+  (should (string= "*Agent-Q Context*" agent-q-context-panel-buffer)))
+
+(ert-deftest agent-q-context/panel/context-items-variable ()
+  "Test that context items buffer-local variable exists."
+  (with-temp-buffer
+    (should (local-variable-if-set-p 'agent-q-context-items))))
+
+(ert-deftest agent-q-context/panel/button-face-defined ()
+  "Test that context button face is defined."
+  (should (facep 'agent-q-context-button-face)))
+
+(ert-deftest agent-q-context/panel/refresh-function-exists ()
+  "Test that refresh function is defined."
+  (should (fboundp 'agent-q--refresh-context-panel)))
+
+(ert-deftest agent-q-context/panel/insert-panel-item-function-exists ()
+  "Test that insert panel item function is defined."
+  (should (fboundp 'agent-q--insert-context-panel-item)))
+
+(ert-deftest agent-q-context/panel/visit-context-item-function-exists ()
+  "Test that visit context item function is defined."
+  (should (fboundp 'agent-q--visit-context-item)))
+
+(ert-deftest agent-q-context/panel/remove-context-item-function-exists ()
+  "Test that remove context item function is defined."
+  (should (fboundp 'agent-q--remove-context-item)))
+
+(ert-deftest agent-q-context/panel/displays-items ()
+  "Test that panel displays context items when present."
+  (with-temp-buffer
+    (rename-buffer "*Agent-Q Chat*" t)
+    (setq-local agent-q-context-items
+                (list (make-agent-q-context-item
+                       :type :file
+                       :display-name "test.lisp"
+                       :data '(:path "/path/to/test.lisp")
+                       :content "(defun test () 42)")))
+    (unwind-protect
+        (progn
+          (agent-q-show-context-panel)
+          (with-current-buffer "*Agent-Q Context*"
+            (goto-char (point-min))
+            ;; Search from beginning for both: FILE label and name
+            (should (search-forward "[FILE]" nil t))
+            (goto-char (point-min))
+            (should (search-forward "test.lisp" nil t))))
+      (when (get-buffer "*Agent-Q Context*")
+        (kill-buffer "*Agent-Q Context*"))
+      (kill-buffer "*Agent-Q Chat*"))))
+
+(ert-deftest agent-q-context/panel/has-clear-all-button ()
+  "Test that panel has Clear All button."
+  (unwind-protect
+      (progn
+        (agent-q-show-context-panel)
+        (with-current-buffer "*Agent-Q Context*"
+          (goto-char (point-min))
+          (should (search-forward "[Clear All]" nil t))))
+    (when (get-buffer "*Agent-Q Context*")
+      (kill-buffer "*Agent-Q Context*"))))
+
+(ert-deftest agent-q-context/panel/mode-derived-from-special ()
+  "Test that panel mode is derived from special-mode."
+  (unwind-protect
+      (progn
+        (agent-q-show-context-panel)
+        (with-current-buffer "*Agent-Q Context*"
+          (should (derived-mode-p 'special-mode))))
+    (when (get-buffer "*Agent-Q Context*")
+      (kill-buffer "*Agent-Q Context*"))))
+
+(ert-deftest agent-q-context/panel/remove-item-from-list ()
+  "Test that remove function removes item from context list."
+  (with-temp-buffer
+    (rename-buffer "*Agent-Q Chat*" t)
+    (let ((item1 (make-agent-q-context-item :type :file :display-name "a.lisp"))
+          (item2 (make-agent-q-context-item :type :buffer :display-name "*scratch*")))
+      (setq-local agent-q-context-items (list item1 item2))
+      (unwind-protect
+          (progn
+            (should (= 2 (length agent-q-context-items)))
+            (agent-q--remove-context-item item1)
+            (should (= 1 (length agent-q-context-items)))
+            (should (eq item2 (car agent-q-context-items))))
+        (kill-buffer "*Agent-Q Chat*")))))
+
 (provide 'sly-agent-q-context-test)
 ;;; sly-agent-q-context-test.el ends here
