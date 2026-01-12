@@ -4,13 +4,26 @@
 
 Agent-Q is an intelligent assistant that integrates with SLY/Emacs to provide context-aware help with Common Lisp development. It can understand your code, answer questions, generate documentation, suggest fixes, and act as an autonomous development partner.
 
-## Features (Phase 1)
+## Features
 
+### Phase 1 (Complete) ✅
 - 🧠 **Context-aware assistance** - Accumulate code snippets from your buffers for targeted help
 - 💬 **Conversational interface** - Multi-turn conversations with full history
 - 🔧 **SLY integration** - Seamless integration with your existing Lisp workflow
 - 🎨 **Multiple providers** - Support for Anthropic, OpenAI, Ollama, and OpenRouter
 - ⚡ **Quick actions** - Document functions, explain code, debug errors with a keystroke
+
+### Phase 2 (In Progress) 🔄
+- 🛠️ **Tool system** - Extensible tool registry for agent capabilities
+- 🔍 **Introspection tools** - describe, apropos, documentation, who-calls
+- ⚙️ **Execution tools** - eval, compile, macroexpand in running image
+- 📊 **Diff approval** - Review and approve code changes before application
+
+### Phase 3 (Partial) 🔄
+- 💾 **Session management** - Persistent sessions with SQLite storage
+- 📝 **Rich markdown** - Beautiful rendering with syntax highlighting in chat
+- 🌊 **Streaming responses** - Real-time token-by-token display
+- ⏳ **Planned**: Condition system integration, test framework integration, knowledge base
 
 ## Prerequisites
 
@@ -248,14 +261,14 @@ agent-q:*provider-instance*   ; => #<CL-LLM-PROVIDER:PROVIDER>
 
 ## Architecture
 
-Agent-Q is organized into four planned phases:
+Agent-Q is organized into four phases, with Phases 1-2 substantially complete:
 
-- **Phase 1 (Current)**: Foundation - Context management, LLM integration, basic Emacs UI
-- **Phase 2**: REPL-aware - Tool system for introspection and code execution
-- **Phase 3**: Autonomous - Condition system integration, testing, knowledge persistence
-- **Phase 4**: Intelligent - Semantic indexing, profiling, refactoring, pattern detection
+- **Phase 1 (Complete ✅)**: Foundation - Context management, LLM integration, basic Emacs UI
+- **Phase 2 (In Progress 🔄)**: REPL-aware - Tool system for introspection and code execution
+- **Phase 3 (Partial 🔄)**: Autonomous - Session persistence complete; condition system, testing, knowledge base pending
+- **Phase 4 (Planned ⏳)**: Intelligent - Semantic indexing, profiling, refactoring, pattern detection
 
-See `specs/` directory for detailed specifications of each phase.
+See `specs/` directory for detailed specifications and `specs/PHASE1-IMPLEMENTATION-SUMMARY.md` for Phase 1 completion details.
 
 ## Development
 
@@ -289,17 +302,33 @@ See `specs/` directory for detailed specifications of each phase.
 agent-q/
 ├── agent-q.asd                    # ASDF system definition
 ├── src/                           # Common Lisp source
-│   ├── package.lisp
-│   ├── config.lisp
-│   ├── context.lisp
-│   ├── conversation.lisp
-│   ├── prompts.lisp
-│   ├── agent.lisp
-│   └── sly-interface.lisp
+│   ├── package.lisp               # Core package definition
+│   ├── config.lisp                # Configuration management
+│   ├── context.lisp               # Context accumulation
+│   ├── conversation.lisp          # Message history
+│   ├── prompts.lisp               # System prompts
+│   ├── agent.lisp                 # Core agent loop
+│   ├── llm-integration.lisp       # LLM provider integration
+│   ├── session.lisp               # Session persistence (SQLite)
+│   ├── sly-interface.lisp         # SLY RPC endpoints
+│   └── tools/                     # Tool system (Phase 2)
+│       ├── package.lisp
+│       ├── registry.lisp
+│       ├── introspection.lisp
+│       ├── execution.lisp
+│       ├── buffer.lisp
+│       └── diff.lisp
 ├── contrib/
-│   └── sly-agent-q/
-│       └── sly-agent-q.el         # Emacs integration
+│   └── sly-agent-q/               # Emacs integration
+│       ├── sly-agent-q.el         # Core minor mode
+│       ├── sly-agent-q-chat.el    # Chat interface with markdown
+│       ├── sly-agent-q-sessions.el # Session management UI
+│       ├── sly-agent-q-tools.el   # Tool execution UI
+│       ├── sly-agent-q-diff.el    # Diff approval interface
+│       └── test/                  # Comprehensive test suite
 ├── specs/                         # Design specifications
+│   ├── PHASE1-IMPLEMENTATION-SUMMARY.md
+│   └── plans/                     # Feature implementation plans
 └── README.md
 ```
 
@@ -331,4 +360,10 @@ MIT License - see LICENSE file for details
 
 ---
 
-**Status**: Phase 1 (Foundation) - Active Development
+**Status**: Phase 1 Complete ✅ | Phase 2 In Progress 🔄 | Phase 3 Partial 🔄
+
+**Recent Additions:**
+- Comprehensive chat interface with markdown rendering and streaming
+- Session management with SQLite persistence
+- Tool system with introspection, execution, and diff approval
+- Full test suite for Elisp components
