@@ -108,6 +108,43 @@ Each candidate has `agent-q-context-type' set to :buffer and
                                (string-prefix-p prefix name t))))
                       (buffer-list))))
 
+;;; Completion at Point
+
+(defun agent-q--context-candidates (prefix)
+  "Return completion candidates matching PREFIX.
+Combines files, symbols, and buffers. Strips leading @ from PREFIX
+if present."
+  (let ((prefix-no-at (if (string-prefix-p "@" prefix)
+                          (substring prefix 1)
+                        prefix)))
+    (append
+     (agent-q--file-candidates prefix-no-at)
+     (agent-q--symbol-candidates prefix-no-at)
+     (agent-q--buffer-candidates prefix-no-at))))
+
+(defun agent-q--context-annotation (candidate)
+  "Return annotation for CANDIDATE showing its type.
+Returns a string like \" [file]\" for display in completion UI."
+  (let ((type (get-text-property 0 'agent-q-context-type candidate)))
+    (pcase type
+      (:file " [file]")
+      (:symbol " [symbol]")
+      (:buffer " [buffer]")
+      (:region " [region]")
+      (:url " [url]")
+      (_ ""))))
+
+(defun agent-q-context-complete-at-point ()
+  "Completion-at-point function for @-mentions.
+Returns completion data when point is after an @-mention, nil otherwise.
+Works with any completion framework (vertico, ivy, helm, default)."
+  (when-let ((bounds (agent-q--context-mention-bounds)))
+    (list (car bounds)
+          (cdr bounds)
+          (completion-table-dynamic #'agent-q--context-candidates)
+          :exclusive 'no
+          :annotation-function #'agent-q--context-annotation)))
+
 ;;; @-Mention Detection
 
 (defun agent-q--context-mention-bounds ()

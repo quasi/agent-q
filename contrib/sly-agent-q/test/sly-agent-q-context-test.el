@@ -292,5 +292,91 @@
       ;; Should return nil because point is beyond the match
       (should-not bounds))))
 
+;;;; Task 6: Completion-at-Point
+
+(ert-deftest agent-q-context/capf/returns-nil-without-mention ()
+  "Test that CAPF returns nil when no @ present."
+  (with-temp-buffer
+    (insert "Hello world")
+    (should-not (agent-q-context-complete-at-point))))
+
+(ert-deftest agent-q-context/capf/returns-completion-data ()
+  "Test that CAPF returns proper completion data for @-mention."
+  (with-temp-buffer
+    (insert "Hello @te")
+    (let ((result (agent-q-context-complete-at-point)))
+      (should result)
+      ;; Result is (start end table . props) where props is a plist
+      (should (>= (length result) 3))
+      (should (numberp (nth 0 result)))  ; start
+      (should (numberp (nth 1 result)))  ; end
+      (should (functionp (nth 2 result)))))) ; completion table
+
+(ert-deftest agent-q-context/capf/has-annotation-function ()
+  "Test that CAPF includes annotation function in properties."
+  (with-temp-buffer
+    (insert "Hello @te")
+    (let ((result (agent-q-context-complete-at-point)))
+      (should result)
+      (let ((props (nthcdr 3 result)))
+        (should (plist-get props :annotation-function))))))
+
+(ert-deftest agent-q-context/capf/combined-candidates ()
+  "Test that combined candidates include all types."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun capf-test-fn () nil)")
+    (setq imenu--index-alist nil)
+    (let ((candidates (agent-q--context-candidates "capf-test")))
+      ;; Should have symbol from our buffer
+      (should (cl-some (lambda (c) (string-match-p "capf-test" c))
+                       candidates)))))
+
+(ert-deftest agent-q-context/capf/combined-candidates-strips-at ()
+  "Test that combined candidates strips leading @ from prefix."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun strip-at-test-fn () nil)")
+    (setq imenu--index-alist nil)
+    ;; Prefix with @ should still work
+    (let ((candidates (agent-q--context-candidates "@strip-at-test")))
+      (should (cl-some (lambda (c) (string-match-p "strip-at-test" c))
+                       candidates)))))
+
+(ert-deftest agent-q-context/capf/annotation-function-file ()
+  "Test annotation function returns [file] for file type."
+  (let ((candidate (propertize "test.lisp" 'agent-q-context-type :file)))
+    (should (string= " [file]" (agent-q--context-annotation candidate)))))
+
+(ert-deftest agent-q-context/capf/annotation-function-symbol ()
+  "Test annotation function returns [symbol] for symbol type."
+  (let ((candidate (propertize "my-func" 'agent-q-context-type :symbol)))
+    (should (string= " [symbol]" (agent-q--context-annotation candidate)))))
+
+(ert-deftest agent-q-context/capf/annotation-function-buffer ()
+  "Test annotation function returns [buffer] for buffer type."
+  (let ((candidate (propertize "*scratch*" 'agent-q-context-type :buffer)))
+    (should (string= " [buffer]" (agent-q--context-annotation candidate)))))
+
+(ert-deftest agent-q-context/capf/annotation-function-region ()
+  "Test annotation function returns [region] for region type."
+  (let ((candidate (propertize "selection" 'agent-q-context-type :region)))
+    (should (string= " [region]" (agent-q--context-annotation candidate)))))
+
+(ert-deftest agent-q-context/capf/annotation-function-url ()
+  "Test annotation function returns [url] for url type."
+  (let ((candidate (propertize "https://example.com" 'agent-q-context-type :url)))
+    (should (string= " [url]" (agent-q--context-annotation candidate)))))
+
+(ert-deftest agent-q-context/capf/annotation-function-unknown ()
+  "Test annotation function returns empty string for unknown type."
+  (let ((candidate (propertize "test" 'agent-q-context-type :unknown)))
+    (should (string= "" (agent-q--context-annotation candidate)))))
+
+(ert-deftest agent-q-context/capf/annotation-function-no-property ()
+  "Test annotation function handles missing type property."
+  (let ((candidate "plain-string"))
+    (should (string= "" (agent-q--context-annotation candidate)))))
+
 (provide 'sly-agent-q-context-test)
 ;;; sly-agent-q-context-test.el ends here
