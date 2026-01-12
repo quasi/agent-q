@@ -275,5 +275,22 @@
       (should bounds)
       (should (= (car bounds) 5))))) ; Position of @
 
+(ert-deftest agent-q-context/mention/stops-at-whitespace ()
+  "Test that bounds only include the mention, not text after whitespace."
+  (with-temp-buffer
+    (insert "@file hello")
+    (goto-char 6)  ; Right at end of "@file" (position after 'e')
+    (let ((bounds (agent-q--context-mention-bounds)))
+      (should bounds)
+      (should (= (car bounds) 1))
+      (should (= (cdr bounds) 6))))  ; Should end at "file", not extend to "hello"
+  ;; Also test when point is beyond the space
+  (with-temp-buffer
+    (insert "@file hello")
+    (goto-char 7)  ; After space, at 'h' in "hello"
+    (let ((bounds (agent-q--context-mention-bounds)))
+      ;; Should return nil because point is beyond the match
+      (should-not bounds))))
+
 (provide 'sly-agent-q-context-test)
 ;;; sly-agent-q-context-test.el ends here
