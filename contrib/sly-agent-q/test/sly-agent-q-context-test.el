@@ -746,5 +746,181 @@
             (should (eq item2 (car agent-q-context-items))))
         (kill-buffer "*Agent-Q Chat*")))))
 
+;;;; Task 10: Interactive Commands
+
+(ert-deftest agent-q-context/commands/clear-empties-list ()
+  "Test that clear-context empties the context list."
+  (with-temp-buffer
+    (setq-local agent-q-context-items
+                (list (make-agent-q-context-item :type :file :display-name "test")))
+    (should agent-q-context-items)
+    (agent-q-clear-context)
+    (should-not agent-q-context-items)))
+
+(ert-deftest agent-q-context/commands/clear-is-interactive ()
+  "Test that clear-context is an interactive command."
+  (should (commandp 'agent-q-clear-context)))
+
+(ert-deftest agent-q-context/commands/add-file-creates-item ()
+  "Test that add-context-file creates proper item."
+  (let* ((temp-file (make-temp-file "agent-q-add-test"))
+         (item nil))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file (insert "content"))
+          (cl-letf (((symbol-function 'read-file-name)
+                     (lambda (&rest _) temp-file)))
+            (setq item (agent-q--add-context-file)))
+          (should (agent-q-context-item-p item))
+          (should (eq :file (agent-q-context-item-type item)))
+          (should (agent-q-context-item-content item)))
+      (delete-file temp-file))))
+
+(ert-deftest agent-q-context/commands/add-file-sets-display-name ()
+  "Test that add-context-file uses file basename as display name."
+  (let* ((temp-file (make-temp-file "agent-q-name-test")))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file (insert "content"))
+          (cl-letf (((symbol-function 'read-file-name)
+                     (lambda (&rest _) temp-file)))
+            (let ((item (agent-q--add-context-file)))
+              (should (string= (file-name-nondirectory temp-file)
+                              (agent-q-context-item-display-name item))))))
+      (delete-file temp-file))))
+
+(ert-deftest agent-q-context/commands/add-file-stores-path ()
+  "Test that add-context-file stores expanded file path in data."
+  (let* ((temp-file (make-temp-file "agent-q-path-test")))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file (insert "content"))
+          (cl-letf (((symbol-function 'read-file-name)
+                     (lambda (&rest _) temp-file)))
+            (let* ((item (agent-q--add-context-file))
+                   (data (agent-q-context-item-data item)))
+              (should (string= (expand-file-name temp-file)
+                              (plist-get data :path))))))
+      (delete-file temp-file))))
+
+(ert-deftest agent-q-context/commands/add-buffer-creates-item ()
+  "Test that add-context-buffer creates proper item."
+  (with-temp-buffer
+    (rename-buffer "agent-q-add-buf-test" t)
+    (insert "buffer content")
+    (unwind-protect
+        (cl-letf (((symbol-function 'read-buffer)
+                   (lambda (&rest _) "agent-q-add-buf-test")))
+          (let ((item (agent-q--add-context-buffer)))
+            (should (agent-q-context-item-p item))
+            (should (eq :buffer (agent-q-context-item-type item)))
+            (should (string= "buffer content"
+                            (agent-q-context-item-content item)))))
+      (kill-buffer "agent-q-add-buf-test"))))
+
+(ert-deftest agent-q-context/commands/add-buffer-sets-display-name ()
+  "Test that add-context-buffer uses buffer name as display name."
+  (with-temp-buffer
+    (rename-buffer "agent-q-display-buf-test" t)
+    (insert "content")
+    (unwind-protect
+        (cl-letf (((symbol-function 'read-buffer)
+                   (lambda (&rest _) "agent-q-display-buf-test")))
+          (let ((item (agent-q--add-context-buffer)))
+            (should (string= "agent-q-display-buf-test"
+                            (agent-q-context-item-display-name item)))))
+      (kill-buffer "agent-q-display-buf-test"))))
+
+(ert-deftest agent-q-context/commands/add-region-creates-item ()
+  "Test that add-context-region creates proper item."
+  (with-temp-buffer
+    (rename-buffer "agent-q-region-test" t)
+    (transient-mark-mode 1)  ; Enable for batch mode
+    (insert "line 1\nselected text\nline 3")
+    (goto-char 8)
+    (push-mark 21 t t)  ; Activate mark
+    (unwind-protect
+        (let ((item (agent-q--add-context-region)))
+          (should (agent-q-context-item-p item))
+          (should (eq :region (agent-q-context-item-type item)))
+          (should (string= "selected text"
+                          (agent-q-context-item-content item))))
+      (kill-buffer "agent-q-region-test"))))
+
+(ert-deftest agent-q-context/commands/add-region-requires-active-region ()
+  "Test that add-context-region errors when no region is active."
+  (with-temp-buffer
+    (insert "no selection")
+    (deactivate-mark)
+    (should-error (agent-q--add-context-region) :type 'user-error)))
+
+(ert-deftest agent-q-context/commands/add-region-display-name-format ()
+  "Test that add-context-region display name includes buffer and line numbers."
+  (with-temp-buffer
+    (rename-buffer "region-name-test" t)
+    (transient-mark-mode 1)  ; Enable for batch mode
+    (insert "line 1\nselected\nline 3")
+    (goto-char 8)
+    (push-mark 16 t t)  ; Activate mark
+    (unwind-protect
+        (let ((item (agent-q--add-context-region)))
+          (let ((display-name (agent-q-context-item-display-name item)))
+            (should (string-match-p "region-name-test" display-name))
+            (should (string-match-p ":" display-name))))
+      (kill-buffer "region-name-test"))))
+
+(ert-deftest agent-q-context/commands/add-symbol-creates-item ()
+  "Test that add-context-symbol creates proper item."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun agent-q-sym-test-fn () 42)\n")
+    (setq imenu--index-alist nil)
+    (cl-letf (((symbol-function 'completing-read)
+               (lambda (&rest _)
+                 (propertize "agent-q-sym-test-fn"
+                             'agent-q-context-type :symbol
+                             'agent-q-context-data (list :name "agent-q-sym-test-fn"
+                                                         :position (point-min-marker))))))
+      (let ((item (agent-q--add-context-symbol)))
+        (should (agent-q-context-item-p item))
+        (should (eq :symbol (agent-q-context-item-type item)))))))
+
+(ert-deftest agent-q-context/commands/add-context-is-interactive ()
+  "Test that add-context is an interactive command."
+  (should (commandp 'agent-q-add-context)))
+
+(ert-deftest agent-q-context/commands/add-context-dispatches-file ()
+  "Test that add-context dispatches to file handler."
+  (let* ((temp-file (make-temp-file "agent-q-dispatch-test"))
+         (dispatched nil))
+    (unwind-protect
+        (progn
+          (with-temp-file temp-file (insert "content"))
+          (cl-letf (((symbol-function 'completing-read)
+                     (lambda (&rest _) "file"))
+                    ((symbol-function 'agent-q--add-context-file)
+                     (lambda ()
+                       (setq dispatched t)
+                       (make-agent-q-context-item :type :file :display-name "test"))))
+            (with-temp-buffer
+              (agent-q-add-context))
+            (should dispatched)))
+      (delete-file temp-file))))
+
+(ert-deftest agent-q-context/commands/add-context-adds-to-list ()
+  "Test that add-context adds item to context list."
+  (with-temp-buffer
+    (setq-local agent-q-context-items nil)
+    (cl-letf (((symbol-function 'completing-read)
+               (lambda (&rest _) "buffer"))
+              ((symbol-function 'agent-q--add-context-buffer)
+               (lambda ()
+                 (make-agent-q-context-item :type :buffer
+                                            :display-name "*test*"
+                                            :content "content"))))
+      (agent-q-add-context)
+      (should (= 1 (length agent-q-context-items)))
+      (should (eq :buffer (agent-q-context-item-type (car agent-q-context-items)))))))
+
 (provide 'sly-agent-q-context-test)
 ;;; sly-agent-q-context-test.el ends here

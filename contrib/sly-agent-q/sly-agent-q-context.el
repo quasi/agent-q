@@ -450,5 +450,95 @@ ARGS are ignored; this function can be used as `revert-buffer-function'."
         (delete-window win)
       (agent-q-show-context-panel))))
 
+;;; Interactive Commands
+
+(defun agent-q-clear-context ()
+  "Clear all context items from the current buffer.
+Also refreshes the context panel if visible."
+  (interactive)
+  (setq agent-q-context-items nil)
+  (when (get-buffer agent-q-context-panel-buffer)
+    (with-current-buffer agent-q-context-panel-buffer
+      (agent-q--refresh-context-panel)))
+  (message "Context cleared"))
+
+(defun agent-q--add-context-file ()
+  "Add file to context interactively.
+Prompts user to select a file and returns the created context item."
+  (let* ((file (read-file-name "Add file: "))
+         (expanded (expand-file-name file))
+         (content (agent-q--fetch-context-content :file (list :path expanded))))
+    (make-agent-q-context-item
+     :type :file
+     :display-name (file-name-nondirectory file)
+     :data (list :path expanded)
+     :content content)))
+
+(defun agent-q--add-context-buffer ()
+  "Add buffer to context interactively.
+Prompts user to select a buffer and returns the created context item."
+  (let* ((buf-name (read-buffer "Add buffer: " nil t))
+         (content (agent-q--fetch-context-content :buffer (list :buffer-name buf-name))))
+    (make-agent-q-context-item
+     :type :buffer
+     :display-name buf-name
+     :data (list :buffer-name buf-name)
+     :content content)))
+
+(defun agent-q--add-context-symbol ()
+  "Add symbol to context interactively.
+Prompts user to select a symbol from open Lisp buffers and returns
+the created context item."
+  (let* ((sym (completing-read "Add symbol: "
+                               (agent-q--symbol-candidates "")))
+         (data (get-text-property 0 'agent-q-context-data sym))
+         (content (agent-q--fetch-context-content :symbol data)))
+    (make-agent-q-context-item
+     :type :symbol
+     :display-name sym
+     :data data
+     :content content)))
+
+(defun agent-q--add-context-region ()
+  "Add current region to context.
+Requires an active region. Returns the created context item.
+Signals `user-error' if no region is active."
+  (unless (use-region-p)
+    (user-error "No region selected"))
+  (let* ((start (region-beginning))
+         (end (region-end))
+         (buf-name (buffer-name))
+         (content (buffer-substring-no-properties start end))
+         (display (format "%s:%d-%d"
+                          buf-name
+                          (line-number-at-pos start)
+                          (line-number-at-pos end))))
+    (make-agent-q-context-item
+     :type :region
+     :display-name display
+     :data (list :buffer buf-name :start start :end end)
+     :content content)))
+
+(defun agent-q-add-context ()
+  "Interactively add a context item.
+Prompts for context type (file, symbol, buffer, region) and then
+prompts for the specific item. Adds the created item to
+`agent-q-context-items' and refreshes the context panel if visible."
+  (interactive)
+  (let* ((type (completing-read "Context type: "
+                                '("file" "symbol" "buffer" "region")
+                                nil t))
+         (item (pcase type
+                 ("file" (agent-q--add-context-file))
+                 ("symbol" (agent-q--add-context-symbol))
+                 ("buffer" (agent-q--add-context-buffer))
+                 ("region" (agent-q--add-context-region)))))
+    (when item
+      (push item agent-q-context-items)
+      (when (get-buffer agent-q-context-panel-buffer)
+        (with-current-buffer agent-q-context-panel-buffer
+          (agent-q--refresh-context-panel)))
+      (message "Added %s to context" (agent-q-context-item-display-name item)))))
+
 (provide 'sly-agent-q-context)
 ;;; sly-agent-q-context.el ends here
