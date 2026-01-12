@@ -101,10 +101,9 @@
                                        (handler-bind
                                            ((warning
                                              (lambda (w)
-                                               (push (princ-to-string w)
-                                                    (if (typep w 'style-warning)
-                                                        style-warnings
-                                                        warnings))
+                                              (if (typep w 'style-warning)
+                                                  (push (princ-to-string w) style-warnings)
+                                                  (push (princ-to-string w) warnings))
                                                (muffle-warning w))))
                                          ;; Evaluate the form (which compiles definitions)
                                          (eval form))
@@ -113,7 +112,7 @@
                                              (append warnings style-warnings notes))
                                        ;; Format result
                                        (with-output-to-string (s)
-                                         (format s "Compilation successful in package ~A.~%~%"
+                                         (format s "Successfully compiled and loaded form in package ~A.~%~%"
                                                 (package-name pkg))
                                          (format s "Form: ~A~%~%" form-string)
                                          (when warnings

@@ -25,6 +25,7 @@
   (:export
    ;; Test suites
    #:core-functionality
+   #:session-tests
    #:phase-2-tools
    #:registry-tests
    #:introspection-tools-tests

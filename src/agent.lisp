@@ -44,11 +44,24 @@
    If include-context is true, prepend accumulated context to the message."))
 
 (defun report-session-info-to-emacs (model provider input-tokens output-tokens)
-  "Report session info to Emacs chat buffer.
+  "Report session info to Emacs chat buffer and update session metadata.
    MODEL - model name string
    PROVIDER - provider keyword (e.g., :anthropic)
    INPUT-TOKENS - total prompt tokens used
    OUTPUT-TOKENS - total completion tokens used"
+  ;; Update session metadata if session manager is active
+  (when *session-manager*
+    (let ((session (current-session *session-manager*)))
+      (when session
+        (when input-tokens
+          (session-add-tokens session input-tokens output-tokens))
+        (when model
+          (setf (session-model session) model))
+        (when provider
+          (let ((meta (session-metadata session)))
+            (setf (getf meta :provider) provider)
+            (setf (session-metadata session) meta))))))
+  ;; Notify Emacs
   (when (and input-tokens output-tokens)
     (agent-q.tools:eval-in-emacs
      `(agent-q-chat-set-session-info
@@ -223,6 +236,7 @@
 
 (defun ensure-agent ()
   "Ensure *current-agent* exists, create if needed.
+   Also ensures session manager is initialized with a current session.
    Requires *provider-instance* to be configured before calling."
   (unless *current-agent*
     (unless *provider-instance*
@@ -231,4 +245,8 @@
     (setf *current-agent*
           (make-instance 'agent
                         :provider *provider-instance*
-                        :system-prompt *base-system-prompt*))))
+                        :system-prompt *base-system-prompt*)))
+  ;; Ensure session manager and current session exist
+  (ensure-session-manager)
+  (ensure-current-session)
+  *current-agent*)

@@ -39,6 +39,46 @@
    #:clear-conversation
    #:new-conversation
 
+   ;; Session
+   #:session
+   #:session-id
+   #:session-name
+   #:session-created-at
+   #:session-updated-at
+   #:session-conversation
+   #:session-model
+   #:session-metadata
+   #:session-messages
+   #:session-add-message
+   #:session-message-count
+   #:session-add-tokens
+   #:make-session
+   #:generate-session-id
+
+   ;; Session Manager
+   #:session-manager
+   #:*session-manager*
+   #:sessions-directory
+   #:current-session
+   #:session-cache
+   #:ensure-session-manager
+   #:ensure-current-session
+
+   ;; Session Persistence
+   #:save-session
+   #:load-session
+   #:delete-session
+   #:list-sessions
+   #:search-sessions
+   #:switch-session
+   #:create-session
+
+   ;; Session Serialization
+   #:session-to-plist
+   #:plist-to-session
+   #:message-to-plist
+   #:plist-to-message
+
    ;; Agent
    #:send-to-agent
    #:get-last-response
@@ -61,4 +101,14 @@
    #:agent-q-get-context-summary
    #:agent-q-new-conversation
    #:agent-q-get-conversation-history
-   #:agent-q-configure))
+   #:agent-q-configure
+
+   ;; SLY interface: Session management
+   #:agent-q-create-session
+   #:agent-q-switch-session
+   #:agent-q-save-session
+   #:agent-q-delete-session
+   #:agent-q-rename-session
+   #:agent-q-list-sessions
+   #:agent-q-search-sessions
+   #:agent-q-get-session-info))

@@ -15,6 +15,7 @@
                             (:file "config")
                             (:file "context")
                             (:file "conversation")
+                            (:file "session")
                             (:file "prompts")
                             (:module "tools"
                              :serial t
@@ -37,11 +38,12 @@
   :license "MIT"
   :version "0.3.0"
   :serial t
-  :depends-on (:agent-q :fiveam)
+  :depends-on (:agent-q :fiveam :cl-ppcre)
   :components ((:module "tests"
                 :serial t
                 :components ((:file "package")
                             (:file "core-tests")
+                            (:file "session-tests")
                             (:file "phase2-tools-tests")
                             (:file "phase2-integration-tests"))))
   :perform (test-op (op c)

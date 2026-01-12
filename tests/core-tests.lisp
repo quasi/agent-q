@@ -87,7 +87,8 @@
   (let ((conv (make-instance 'agent-q::conversation)))
     (is (typep conv 'agent-q::conversation))
     (is (null (agent-q::conversation-messages conv)))
-    (is (typep (agent-q::conversation-context conv) 'list))))
+    ;; context is a context-manager, not a list
+    (is (typep (agent-q::conversation-context conv) 'agent-q::context-manager))))
 
 (test conversation/add-user-message
   "Test adding a user message to conversation."
@@ -118,18 +119,22 @@
     (let ((msg (first (agent-q::conversation-messages conv))))
       (is (eq :debug (agent-q::message-role msg))))))
 
-(test conversation/messages-in-reverse-order
-  "Test that messages are stored in reverse chronological order."
+(test conversation/messages-in-chronological-order
+  "Test that messages are stored in chronological order (oldest first)."
   (let ((conv (make-instance 'agent-q::conversation)))
     (agent-q::add-message conv :user "First")
     (agent-q::add-message conv :assistant "Second")
     (agent-q::add-message conv :user "Third")
 
     (is (= 3 (length (agent-q::conversation-messages conv))))
-    ;; Most recent should be first
+    ;; Oldest should be first (chronological order)
+    (is (string= "First"
+                (agent-q::message-content
+                 (first (agent-q::conversation-messages conv)))))
+    ;; Newest should be last
     (is (string= "Third"
                 (agent-q::message-content
-                 (first (agent-q::conversation-messages conv)))))))
+                 (car (last (agent-q::conversation-messages conv))))))))
 
 (test conversation/build-messages-for-llm
   "Test building message list for LLM API."
@@ -145,8 +150,8 @@
       (is (string= "Question 1" (getf (first messages) :content)))
       (is (string= "Answer 1" (getf (second messages) :content)))
       (is (string= "Question 2" (getf (third messages) :content)))
-      ;; Debug messages should be filtered out
-      (is (every (lambda (msg) (member (getf msg :role) '(:user :assistant)))
+      ;; Roles should be strings for LLM API
+      (is (every (lambda (msg) (member (getf msg :role) '("user" "assistant") :test #'equal))
                 messages)))))
 
 (test conversation/filters-debug-messages
@@ -159,16 +164,18 @@
     (let ((messages (agent-q::build-messages-for-llm conv)))
       ;; Should only have 2 messages (user and assistant)
       (is (= 2 (length messages)))
-      (is (every (lambda (msg) (member (getf msg :role) '(:user :assistant)))
+      ;; Roles should be strings for LLM API
+      (is (every (lambda (msg) (member (getf msg :role) '("user" "assistant") :test #'equal))
                 messages)))))
 
 ;;;; Context Tests
 
 (test context/create-context-item
   "Test creating a context item."
-  (let ((item (agent-q:make-context-item :code
-                                        "(defun foo () 42)"
-                                        '(:file "test.lisp"))))
+  ;; make-context-item signature: (content &key (type :code) metadata)
+  (let ((item (agent-q:make-context-item "(defun foo () 42)"
+                                         :type :code
+                                         :metadata '(:file "test.lisp"))))
     (is (typep item 'agent-q::context-item))
     (is (eq :code (agent-q:context-item-type item)))
     (is (string= "(defun foo () 42)" (agent-q:context-item-content item)))
@@ -177,27 +184,38 @@
 (test context/add-to-context
   "Test adding items to conversation context."
   (let ((conv (make-instance 'agent-q::conversation)))
-    (agent-q::add-to-context conv :code "(defun test () t)")
+    ;; add-context works on context-manager, not conversation
+    (agent-q::add-context (agent-q::conversation-context conv)
+                          "(defun test () t)"
+                          :type :code)
 
-    (is (= 1 (length (agent-q::conversation-context conv))))
-    (let ((item (first (agent-q::conversation-context conv))))
-      (is (eq :code (agent-q:context-item-type item))))))
+    ;; get-context retrieves items from context-manager
+    (let ((items (agent-q::get-context (agent-q::conversation-context conv))))
+      (is (= 1 (length items)))
+      (let ((item (first items)))
+        (is (eq :code (agent-q:context-item-type item)))))))
 
 (test context/clear-context
   "Test clearing conversation context."
   (let ((conv (make-instance 'agent-q::conversation)))
-    (agent-q::add-to-context conv :code "code1")
-    (agent-q::add-to-context conv :code "code2")
-    (is (= 2 (length (agent-q::conversation-context conv))))
+    ;; add-context works on context-manager
+    (agent-q::add-context (agent-q::conversation-context conv) "code1" :type :code)
+    (agent-q::add-context (agent-q::conversation-context conv) "code2" :type :code)
+    (is (= 2 (length (agent-q::get-context (agent-q::conversation-context conv)))))
 
-    (agent-q::clear-context conv)
-    (is (= 0 (length (agent-q::conversation-context conv))))))
+    ;; clear-context works on context-manager
+    (agent-q::clear-context (agent-q::conversation-context conv))
+    (is (= 0 (length (agent-q::get-context (agent-q::conversation-context conv)))))))
 
 (test context/format-for-llm
   "Test formatting context items for LLM consumption."
   (let ((conv (make-instance 'agent-q::conversation)))
-    (agent-q::add-to-context conv :code "(defun foo () 42)")
+    ;; add-context works on context-manager
+    (agent-q::add-context (agent-q::conversation-context conv)
+                          "(defun foo () 42)"
+                          :type :code)
 
+    ;; context-to-string formats the context-manager
     (let ((formatted (agent-q::context-to-string (agent-q::conversation-context conv))))
       (is (stringp formatted))
       (is (search "(defun foo () 42)" formatted)))))
@@ -271,7 +289,7 @@
   (run! 'core-functionality))
 
 (defun run-agent-q-tests ()
-  "Run all Agent-Q tests (core + phase 2)."
+  "Run all Agent-Q tests (core + session + phase 2)."
   (format t "~%~%╔════════════════════════════════════════╗~%")
   (format t "║   Agent-Q Comprehensive Test Suite   ║~%")
   (format t "╚════════════════════════════════════════╝~%~%")
@@ -279,6 +297,10 @@
   ;; Core tests
   (format t "~%=== Core Functionality Tests ===~%~%")
   (run! 'core-functionality)
+
+  ;; Session tests
+  (format t "~%~%=== Session Management Tests ===~%~%")
+  (run! 'session-tests)
 
   ;; Phase 2 tests
   (format t "~%~%=== Phase 2 Tests ===~%~%")

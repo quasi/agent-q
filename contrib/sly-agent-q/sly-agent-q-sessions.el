@@ -1,27 +1,22 @@
 ;;; sly-agent-q-sessions.el --- Session persistence for Agent-Q -*- lexical-binding: t; -*-
 
-;; ABOUTME: Session management module for Agent-Q chat interface.
-;; ABOUTME: Provides save, load, switch, and search functionality for chat sessions.
+;; ABOUTME: Session management UI for Agent-Q chat interface.
+;; ABOUTME: Provides UI for session operations; persistence handled by Common Lisp.
 
 ;; Author: Abhijit Rao <quasi@quasilabs.in>
-;; Version: 0.1.0
+;; Version: 0.2.0
 ;; Package-Requires: ((emacs "27.1") (sly "1.0"))
 ;; Keywords: lisp, ai, chat, sessions
 ;; URL: https://github.com/quasilabs/agent-q
 
 ;;; Commentary:
 
-;; This module provides session persistence for the Agent-Q chat interface.
-;; Sessions are stored as Lisp files in ~/.emacs.d/agent-q-sessions/,
-;; making them human-readable and grep-searchable.
+;; This module provides session management UI for the Agent-Q chat interface.
+;; Session persistence is handled by Common Lisp via RPC calls.
 ;;
-;; Features:
-;; - Storage backend protocol for future extensibility (e.g., vector DB)
-;; - File-based storage with readable Lisp format
-;; - Session switching with completion
-;; - Grep-based search across sessions
-;; - Auto-save on buffer kill and periodic timer
-;; - Mode line session indicator
+;; Architecture:
+;; - Elisp: UI layer (commands, completion, mode line, keybindings)
+;; - Common Lisp: Persistence layer (save, load, search, serialization)
 ;;
 ;; Usage:
 ;;   C-c C-s   - Switch to a different session
@@ -32,37 +27,20 @@
 ;;; Code:
 
 (require 'cl-lib)
-(require 'eieio)
-
-;; IMPORTANT: This module MUST be loaded via sly-agent-q-chat.el's require,
-;; which happens AFTER the struct definitions. Loading this file directly
-;; or from a stale .elc will cause errors. Delete any .elc files if you
-;; see "void-function make-agent-q-message" errors.
+(require 'sly)
 
 ;; Forward declarations for chat module symbols
-(declare-function agent-q-message-id "sly-agent-q-chat")
 (declare-function agent-q-message-role "sly-agent-q-chat")
 (declare-function agent-q-message-content "sly-agent-q-chat")
-(declare-function agent-q-message-timestamp "sly-agent-q-chat")
-(declare-function agent-q-message-context-snapshot "sly-agent-q-chat")
-(declare-function agent-q-message-metadata "sly-agent-q-chat")
-(declare-function make-agent-q-message "sly-agent-q-chat")
 (declare-function agent-q-session-id "sly-agent-q-chat")
 (declare-function agent-q-session-name "sly-agent-q-chat")
-(declare-function agent-q-session-created-at "sly-agent-q-chat")
-(declare-function agent-q-session-updated-at "sly-agent-q-chat")
 (declare-function agent-q-session-messages "sly-agent-q-chat")
-(declare-function agent-q-session-model "sly-agent-q-chat")
 (declare-function agent-q-session-metadata "sly-agent-q-chat")
-(declare-function make-agent-q-session "sly-agent-q-chat")
 (declare-function agent-q-session--create "sly-agent-q-chat")
 (declare-function agent-q--setup-buffer-layout "sly-agent-q-chat")
 (declare-function agent-q--render-user-message "sly-agent-q-chat")
 (declare-function agent-q--render-assistant-message "sly-agent-q-chat")
 (declare-function agent-q-session-set-name "sly-agent-q-chat")
-(declare-function agent-q-session-set-model "sly-agent-q-chat")
-(declare-function agent-q-session-update-metadata "sly-agent-q-chat")
-(declare-function agent-q-session-add-tokens "sly-agent-q-chat")
 
 (defvar agent-q--current-session)
 (defvar agent-q-chat-buffer-name)
@@ -73,12 +51,6 @@
   "Agent-Q session management."
   :group 'agent-q-chat
   :prefix "agent-q-")
-
-(defcustom agent-q-sessions-directory
-  (expand-file-name "agent-q-sessions" user-emacs-directory)
-  "Directory where Agent-Q sessions are stored."
-  :type 'directory
-  :group 'agent-q-sessions)
 
 (defcustom agent-q-auto-save-sessions t
   "Whether to auto-save sessions."
@@ -91,203 +63,64 @@ Set to 0 to disable periodic saves (still saves on buffer kill)."
   :type 'integer
   :group 'agent-q-sessions)
 
-;;; Storage Backend Protocol
+;;; RPC Helpers
 
-(cl-defgeneric agent-q-storage-save (backend session)
-  "Save SESSION using BACKEND.
-SESSION is an `agent-q-session' struct.")
+(defun agent-q--check-sly-connection ()
+  "Check if SLY is connected and signal error if not."
+  (unless (sly-connected-p)
+    (user-error "Not connected to Lisp. Start SLY first with M-x sly")))
 
-(cl-defgeneric agent-q-storage-load (backend session-id)
-  "Load session with SESSION-ID using BACKEND.
-Return an `agent-q-session' struct or nil if not found.")
-
-(cl-defgeneric agent-q-storage-delete (backend session-id)
-  "Delete session with SESSION-ID using BACKEND.")
-
-(cl-defgeneric agent-q-storage-list (backend)
-  "List all sessions using BACKEND.
-Return a list of plists with :id, :name, :created keys.")
-
-(cl-defgeneric agent-q-storage-search (backend query)
-  "Search sessions matching QUERY using BACKEND.
-Return a list of `agent-q-session' structs.")
-
-;;; File-Based Storage Backend
-
-(defclass agent-q-storage-file-backend ()
-  ((directory :initarg :directory
-              :initform (expand-file-name "agent-q-sessions"
-                                          user-emacs-directory)
-              :accessor agent-q-storage-directory
-              :documentation "Directory for session files."))
-  "File-based session storage backend.
-Stores sessions as readable Lisp files.")
-
-(defvar agent-q-storage-backend nil
-  "The active storage backend.
-Initialized lazily to respect customization.")
-
-(defun agent-q--get-storage-backend ()
-  "Get or create the storage backend."
-  (unless agent-q-storage-backend
-    (setq agent-q-storage-backend
-          (make-instance 'agent-q-storage-file-backend
-                         :directory agent-q-sessions-directory)))
-  agent-q-storage-backend)
-
-;;; Serialization Helpers
-
-(defun agent-q--message-to-plist (msg)
-  "Convert MSG struct to plist for storage."
-  (list :id (agent-q-message-id msg)
-        :role (agent-q-message-role msg)
-        :content (agent-q-message-content msg)
-        :timestamp (agent-q-message-timestamp msg)
-        :context-snapshot (agent-q-message-context-snapshot msg)
-        :metadata (agent-q-message-metadata msg)))
-
-(defun agent-q--plist-to-message (plist)
-  "Convert PLIST to message struct."
-  (make-agent-q-message
-   :id (plist-get plist :id)
-   :role (plist-get plist :role)
-   :content (plist-get plist :content)
-   :timestamp (plist-get plist :timestamp)
-   :context-snapshot (plist-get plist :context-snapshot)
-   :metadata (plist-get plist :metadata)))
-
-(defun agent-q--session-to-plist (session)
-  "Convert SESSION struct to plist for storage."
-  (list :version 1
-        :id (agent-q-session-id session)
-        :name (agent-q-session-name session)
-        :created-at (agent-q-session-created-at session)
-        :updated-at (agent-q-session-updated-at session)
-        :model (agent-q-session-model session)
-        :messages (mapcar #'agent-q--message-to-plist
-                          (reverse (agent-q-session-messages session)))
-        :metadata (agent-q-session-metadata session)))
-
-(defun agent-q--plist-to-session (plist)
-  "Convert PLIST to session struct."
-  (make-agent-q-session
-   :id (plist-get plist :id)
-   :name (plist-get plist :name)
-   :created-at (plist-get plist :created-at)
-   :updated-at (plist-get plist :updated-at)
-   :model (plist-get plist :model)
-   :messages (mapcar #'agent-q--plist-to-message
-                     (reverse (plist-get plist :messages)))
-   :metadata (plist-get plist :metadata)))
-
-(defun agent-q--read-session-metadata (file)
-  "Read just the metadata from session FILE for fast listing.
-Parses header comments without reading the full session data."
-  (with-temp-buffer
-    (insert-file-contents file nil 0 1000)  ; Read first 1KB
-    (goto-char (point-min))
-    (let ((id (file-name-base file))
-          (name nil)
-          (created nil))
-      ;; Parse comments for metadata
-      (while (looking-at "^;; \\(.*\\)")
-        (let ((line (match-string 1)))
-          (cond
-           ((string-match "^Name: \\(.*\\)" line)
-            (setq name (match-string 1 line)))
-           ((string-match "^Created: \\(.*\\)" line)
-            (setq created (match-string 1 line)))))
-        (forward-line 1))
-      (list :id id :name name :created created))))
-
-;;; File Backend Implementation
-
-(cl-defmethod agent-q-storage-save ((backend agent-q-storage-file-backend)
-                                    session)
-  "Save SESSION to a Lisp file."
-  (let* ((dir (agent-q-storage-directory backend))
-         (id (agent-q-session-id session))
-         (file (expand-file-name (concat id ".el") dir)))
-    ;; Ensure directory exists
-    (unless (file-directory-p dir)
-      (make-directory dir t))
-    ;; Write session
-    (with-temp-file file
-      (insert ";; -*- mode: emacs-lisp; lexical-binding: t; -*-\n")
-      (insert ";; Agent-Q Session\n")
-      (insert (format ";; Created: %s\n"
-                      (format-time-string "%Y-%m-%d %H:%M:%S"
-                                          (agent-q-session-created-at session))))
-      (when (agent-q-session-name session)
-        (insert (format ";; Name: %s\n" (agent-q-session-name session))))
-      (insert "\n")
-      (pp (agent-q--session-to-plist session) (current-buffer)))))
-
-(cl-defmethod agent-q-storage-load ((backend agent-q-storage-file-backend)
-                                    session-id)
-  "Load session with SESSION-ID from file."
-  (let* ((dir (agent-q-storage-directory backend))
-         (file (expand-file-name (concat session-id ".el") dir)))
-    (when (file-exists-p file)
-      (with-temp-buffer
-        (insert-file-contents file)
-        (goto-char (point-min))
-        ;; Skip comments
-        (while (looking-at "^;")
-          (forward-line 1))
-        (agent-q--plist-to-session (read (current-buffer)))))))
-
-(cl-defmethod agent-q-storage-delete ((backend agent-q-storage-file-backend)
-                                      session-id)
-  "Delete session file for SESSION-ID."
-  (let* ((dir (agent-q-storage-directory backend))
-         (file (expand-file-name (concat session-id ".el") dir)))
-    (when (file-exists-p file)
-      (delete-file file)
-      t)))
-
-(cl-defmethod agent-q-storage-list ((backend agent-q-storage-file-backend))
-  "List all sessions with metadata."
-  (let* ((dir (agent-q-storage-directory backend))
-         (files (and (file-directory-p dir)
-                     (directory-files dir t "^session-.*\\.el$"))))
-    (mapcar #'agent-q--read-session-metadata
-            (sort files #'file-newer-than-file-p))))
-
-(cl-defmethod agent-q-storage-search ((backend agent-q-storage-file-backend)
-                                      query)
-  "Search sessions for QUERY using grep."
-  (let* ((dir (agent-q-storage-directory backend))
-         (default-directory dir))
-    (when (file-directory-p dir)
-      (let ((matches (split-string
-                      (shell-command-to-string
-                       (format "grep -l -i %s session-*.el 2>/dev/null"
-                               (shell-quote-argument query)))
-                      "\n" t)))
-        (mapcar (lambda (file)
-                  (agent-q-storage-load backend (file-name-base file)))
-                matches)))))
-
-;;; Session Save/Load
+;;; Session Operations (RPC-based)
 
 (defun agent-q--save-current-session ()
-  "Save current session if it has messages."
-  (when (and (boundp 'agent-q--current-session)
-             agent-q--current-session
-             (agent-q-session-messages agent-q--current-session))
-    (agent-q-storage-save (agent-q--get-storage-backend)
-                          agent-q--current-session)))
+  "Save current session via RPC.
+Does nothing if not connected to SLY."
+  (when (sly-connected-p)
+    (sly-eval-async '(agent-q:agent-q-save-session)
+      (lambda (result)
+        (when result
+          (message "Session saved"))))))
 
-(defun agent-q--load-session (session-id)
-  "Load and display SESSION-ID in the chat buffer."
-  (let ((session (agent-q-storage-load (agent-q--get-storage-backend)
-                                       session-id)))
-    (if session
-        (progn
-          (setq agent-q--current-session session)
-          (agent-q--redisplay-session))
-      (user-error "Session not found: %s" session-id))))
+(defun agent-q--list-sessions-sync ()
+  "List sessions synchronously via RPC.
+Returns list of plists with :id, :name, :created-at."
+  (agent-q--check-sly-connection)
+  (sly-eval '(agent-q:agent-q-list-sessions)))
+
+(defun agent-q--search-sessions-sync (query)
+  "Search sessions for QUERY synchronously via RPC.
+Returns list of matching session plists."
+  (agent-q--check-sly-connection)
+  (sly-eval `(agent-q:agent-q-search-sessions ,query)))
+
+(defun agent-q--switch-session-rpc (session-id)
+  "Switch to SESSION-ID via RPC."
+  (agent-q--check-sly-connection)
+  (sly-eval `(agent-q:agent-q-switch-session ,session-id)))
+
+(defun agent-q--create-session-rpc (&optional name)
+  "Create new session via RPC, optionally with NAME.
+Returns new session ID."
+  (agent-q--check-sly-connection)
+  (sly-eval `(agent-q:agent-q-create-session :name ,name)))
+
+(defun agent-q--delete-session-rpc (session-id)
+  "Delete SESSION-ID via RPC."
+  (agent-q--check-sly-connection)
+  (sly-eval `(agent-q:agent-q-delete-session ,session-id)))
+
+(defun agent-q--rename-session-rpc (name)
+  "Rename current session to NAME via RPC."
+  (agent-q--check-sly-connection)
+  (sly-eval `(agent-q:agent-q-rename-session ,name)))
+
+(defun agent-q--get-session-info-rpc ()
+  "Get current session info via RPC.
+Returns plist with :id, :name, :message-count, :total-input-tokens, etc."
+  (when (sly-connected-p)
+    (sly-eval '(agent-q:agent-q-get-session-info))))
+
+;;; Session Display
 
 (defun agent-q--redisplay-session ()
   "Redisplay current session in buffer."
@@ -305,15 +138,18 @@ Parses header comments without reading the full session data."
 (defun agent-q-switch-session ()
   "Switch to a different session."
   (interactive)
-  (let* ((sessions (agent-q-storage-list (agent-q--get-storage-backend)))
+  (agent-q--check-sly-connection)
+  (let* ((sessions (agent-q--list-sessions-sync))
          (choices (mapcar (lambda (meta)
                             (cons (format "%s%s%s"
                                           (plist-get meta :id)
                                           (if (plist-get meta :name)
                                               (format " - %s" (plist-get meta :name))
                                             "")
-                                          (if (plist-get meta :created)
-                                              (format " (%s)" (plist-get meta :created))
+                                          (if (plist-get meta :created-at)
+                                              (format " (%s)"
+                                                      (agent-q--format-timestamp
+                                                       (plist-get meta :created-at)))
                                             ""))
                                   (plist-get meta :id)))
                           sessions)))
@@ -321,80 +157,93 @@ Parses header comments without reading the full session data."
         (message "No saved sessions found")
       (let ((choice (completing-read "Switch to session: " choices nil t)))
         (when choice
-          ;; Save current session first
-          (agent-q--save-current-session)
           (let ((session-id (cdr (assoc choice choices))))
-            (agent-q--load-session session-id)))))))
+            (when (agent-q--switch-session-rpc session-id)
+              ;; Update local state - create new session struct
+              ;; The actual data is managed by CL, we just need a placeholder
+              (setq agent-q--current-session (agent-q-session--create))
+              (setf (agent-q-session-id agent-q--current-session) session-id)
+              (message "Switched to session: %s" session-id))))))))
+
+(defun agent-q--format-timestamp (universal-time)
+  "Format UNIVERSAL-TIME (CL universal time) as readable date."
+  (if (numberp universal-time)
+      ;; Convert from CL universal time (seconds since 1900) to Emacs time
+      ;; CL epoch is 1900-01-01, Unix epoch is 1970-01-01
+      ;; Difference: 2208988800 seconds
+      (let ((unix-time (- universal-time 2208988800)))
+        (format-time-string "%Y-%m-%d %H:%M" (seconds-to-time unix-time)))
+    ""))
 
 ;;;###autoload
 (defun agent-q-new-session ()
   "Start a new session, saving the current one first."
   (interactive)
-  (when (and (boundp 'agent-q--current-session)
-             agent-q--current-session
-             (agent-q-session-messages agent-q--current-session))
-    ;; Save current session first
-    (agent-q--save-current-session))
-  (setq agent-q--current-session (agent-q-session--create))
-  (agent-q--setup-buffer-layout)
-  (message "Started new session: %s" (agent-q-session-id agent-q--current-session)))
+  (agent-q--check-sly-connection)
+  (let ((session-id (agent-q--create-session-rpc)))
+    (when session-id
+      ;; Update local state
+      (setq agent-q--current-session (agent-q-session--create))
+      (agent-q--setup-buffer-layout)
+      (message "Started new session: %s" session-id))))
 
 ;;;###autoload
 (defun agent-q-search-sessions (query)
   "Search past sessions for QUERY."
   (interactive "sSearch sessions: ")
-  (let ((matches (agent-q-storage-search (agent-q--get-storage-backend) query)))
+  (agent-q--check-sly-connection)
+  (let ((matches (agent-q--search-sessions-sync query)))
     (if matches
-        (let* ((choices (mapcar (lambda (session)
-                                  (cons (format "%s - %s (%d messages)"
-                                                (agent-q-session-id session)
-                                                (or (agent-q-session-name session)
-                                                    "unnamed")
-                                                (length (agent-q-session-messages session)))
-                                        session))
+        (let* ((choices (mapcar (lambda (meta)
+                                  (cons (format "%s - %s"
+                                                (plist-get meta :id)
+                                                (or (plist-get meta :name) "unnamed"))
+                                        (plist-get meta :id)))
                                 matches))
                (choice (completing-read
                         (format "Found %d matches: " (length matches))
                         choices nil t)))
           (when choice
-            ;; Save current session first
-            (agent-q--save-current-session)
-            (let ((session (cdr (assoc choice choices))))
-              (setq agent-q--current-session session)
-              (agent-q--redisplay-session))))
+            (let ((session-id (cdr (assoc choice choices))))
+              (when (agent-q--switch-session-rpc session-id)
+                (setq agent-q--current-session (agent-q-session--create))
+                (message "Switched to session: %s" session-id)))))
       (message "No sessions found matching: %s" query))))
 
 ;;;###autoload
 (defun agent-q-name-session (name)
   "Give current session a NAME for easier identification."
   (interactive "sSession name: ")
+  (agent-q--check-sly-connection)
   (unless (and (boundp 'agent-q--current-session) agent-q--current-session)
     (user-error "No active session"))
-  (agent-q-session-set-name agent-q--current-session name)
-  (agent-q--save-current-session)
-  (message "Session named: %s" name))
+  (when (agent-q--rename-session-rpc name)
+    (agent-q-session-set-name agent-q--current-session name)
+    (message "Session named: %s" name)))
 
 ;;;###autoload
 (defun agent-q-delete-session (session-id)
   "Delete the session with SESSION-ID."
   (interactive
-   (let* ((sessions (agent-q-storage-list (agent-q--get-storage-backend)))
-          (choices (mapcar (lambda (meta)
-                             (cons (format "%s%s"
-                                           (plist-get meta :id)
-                                           (if (plist-get meta :name)
-                                               (format " - %s" (plist-get meta :name))
-                                             ""))
-                                   (plist-get meta :id)))
-                           sessions)))
-     (if (null choices)
-         (user-error "No saved sessions")
-       (list (cdr (assoc (completing-read "Delete session: " choices nil t)
-                         choices))))))
+   (progn
+     (agent-q--check-sly-connection)
+     (let* ((sessions (agent-q--list-sessions-sync))
+            (choices (mapcar (lambda (meta)
+                               (cons (format "%s%s"
+                                             (plist-get meta :id)
+                                             (if (plist-get meta :name)
+                                                 (format " - %s" (plist-get meta :name))
+                                               ""))
+                                     (plist-get meta :id)))
+                             sessions)))
+       (if (null choices)
+           (user-error "No saved sessions")
+         (list (cdr (assoc (completing-read "Delete session: " choices nil t)
+                           choices)))))))
   (when (and session-id
              (yes-or-no-p (format "Delete session %s? " session-id)))
-    (agent-q-storage-delete (agent-q--get-storage-backend) session-id)
-    (message "Deleted session: %s" session-id)))
+    (when (agent-q--delete-session-rpc session-id)
+      (message "Deleted session: %s" session-id))))
 
 ;;; Auto-Save
 
@@ -402,12 +251,13 @@ Parses header comments without reading the full session data."
   "Timer for periodic auto-save.")
 
 (defun agent-q--auto-save-if-needed ()
-  "Auto-save current session if chat buffer exists."
-  (when-let ((buf (get-buffer (if (boundp 'agent-q-chat-buffer-name)
-                                  agent-q-chat-buffer-name
-                                "*Agent-Q Chat*"))))
-    (with-current-buffer buf
-      (agent-q--save-current-session))))
+  "Auto-save current session if chat buffer exists and SLY is connected."
+  (when (sly-connected-p)
+    (when-let ((buf (get-buffer (if (boundp 'agent-q-chat-buffer-name)
+                                    agent-q-chat-buffer-name
+                                  "*Agent-Q Chat*"))))
+      (with-current-buffer buf
+        (agent-q--save-current-session)))))
 
 (defun agent-q--setup-auto-save ()
   "Setup auto-save timer."
@@ -433,23 +283,30 @@ Parses header comments without reading the full session data."
 ;;; Mode Line Integration
 
 (defun agent-q--mode-line-session-info ()
-  "Return mode line string for current session."
+  "Return mode line string for current session.
+Fetches info from CL if connected, otherwise uses local state."
   (when (and (boundp 'agent-q--current-session) agent-q--current-session)
-    (let* ((session agent-q--current-session)
-           (meta (agent-q-session-metadata session))
-           (in-tokens (plist-get meta :total-input-tokens))
-           (out-tokens (plist-get meta :total-output-tokens))
-           (name-or-id (if (agent-q-session-name session)
-                           (agent-q-session-name session)
-                         ;; Show abbreviated session ID (date portion)
-                         (let ((id (agent-q-session-id session)))
-                           (if (> (length id) 14)
-                               (substring id 8 14)
-                             id))))
-           (msg-count (length (agent-q-session-messages session))))
+    (let* ((info (agent-q--get-session-info-rpc))
+           ;; Use RPC info if available, fall back to local state
+           (name-or-id (or (plist-get info :name)
+                           (when (agent-q-session-name agent-q--current-session)
+                             (agent-q-session-name agent-q--current-session))
+                           (let ((id (or (plist-get info :id)
+                                         (agent-q-session-id agent-q--current-session))))
+                             (if (and id (> (length id) 14))
+                                 (substring id 8 14)
+                               id))))
+           (msg-count (or (plist-get info :message-count)
+                          (length (agent-q-session-messages agent-q--current-session))))
+           (in-tokens (or (plist-get info :total-input-tokens)
+                          (plist-get (agent-q-session-metadata agent-q--current-session)
+                                     :total-input-tokens)))
+           (out-tokens (or (plist-get info :total-output-tokens)
+                           (plist-get (agent-q-session-metadata agent-q--current-session)
+                                      :total-output-tokens))))
       (format " [%s%s%s]"
-              name-or-id
-              (if (> msg-count 0) (format ":%d" msg-count) "")
+              (or name-or-id "?")
+              (if (and msg-count (> msg-count 0)) (format ":%d" msg-count) "")
               (if (and in-tokens out-tokens (> (+ in-tokens out-tokens) 0))
                   (format " ↑%d↓%d" in-tokens out-tokens)
                 "")))))

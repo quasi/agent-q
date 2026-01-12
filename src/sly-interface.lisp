@@ -76,3 +76,67 @@
    Returns 'ACCEPTED or 'REJECTED."
   (agent-q.tools:eval-in-emacs
    `(sly-agent-q-show-diff-and-wait ,path ,original ,modified ,description)))
+
+;;; ============================================================================
+;;; Session Management RPC Endpoints
+;;; ============================================================================
+
+(defun agent-q-create-session (&key name)
+  "Create a new session, saving current session first.
+   Returns the new session ID."
+  (let ((session (create-session :name name
+                                 :model (when *current-agent*
+                                          (agent-model *current-agent*)))))
+    (session-id session)))
+
+(defun agent-q-switch-session (session-id)
+  "Switch to session by SESSION-ID, saving current first.
+   Returns T on success, NIL if session not found."
+  (not (null (switch-session session-id))))
+
+(defun agent-q-save-session ()
+  "Save the current session to disk.
+   Returns the filepath on success, NIL if no current session."
+  (let ((session (current-session (ensure-session-manager))))
+    (when session
+      (namestring (save-session session)))))
+
+(defun agent-q-delete-session (session-id)
+  "Delete session by SESSION-ID.
+   Returns T if deleted, NIL if not found."
+  (delete-session session-id))
+
+(defun agent-q-rename-session (name)
+  "Rename the current session.
+   Returns T on success, NIL if no current session."
+  (let ((session (current-session (ensure-session-manager))))
+    (when session
+      (setf (session-name session) name)
+      (save-session session)
+      t)))
+
+(defun agent-q-list-sessions ()
+  "List all sessions for completion UI.
+   Returns list of plists: (:id ID :name NAME :created-at TIME :message-count N)"
+  (list-sessions))
+
+(defun agent-q-search-sessions (query)
+  "Search sessions by name and message content.
+   Returns list of matching session plists."
+  (search-sessions query))
+
+(defun agent-q-get-session-info ()
+  "Get current session info for mode line display.
+   Returns plist: (:id ID :name NAME :message-count N
+                  :total-input-tokens N :total-output-tokens N
+                  :model MODEL :provider PROVIDER)"
+  (let ((session (current-session (ensure-session-manager))))
+    (when session
+      (let ((meta (session-metadata session)))
+        (list :id (session-id session)
+              :name (session-name session)
+              :message-count (session-message-count session)
+              :total-input-tokens (getf meta :total-input-tokens)
+              :total-output-tokens (getf meta :total-output-tokens)
+              :model (session-model session)
+              :provider (getf meta :provider))))))
