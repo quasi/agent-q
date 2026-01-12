@@ -24,6 +24,8 @@
 ;;; Code:
 
 (require 'cl-lib)
+(require 'project)
+(require 'seq)
 
 ;;; Data Structures
 
@@ -35,6 +37,23 @@ that provide context to the LLM during conversation."
   (display-name nil :documentation "Short name shown in pill")
   (data nil :documentation "Type-specific data (plist)")
   (content nil :documentation "Actual content to send to LLM"))
+
+;;; Candidate Gathering
+
+(defun agent-q--file-candidates (prefix)
+  "Return file candidates matching PREFIX.
+Searches project files if `project-current' returns a project.
+Each candidate has `agent-q-context-type' and `agent-q-context-data'
+text properties for use by the completion framework."
+  (when-let ((project (project-current)))
+    (let ((files (project-files project)))
+      (mapcar (lambda (file)
+                (propertize (file-name-nondirectory file)
+                            'agent-q-context-type :file
+                            'agent-q-context-data (list :path file)))
+              (seq-filter (lambda (f)
+                            (string-prefix-p prefix (file-name-nondirectory f) t))
+                          files)))))
 
 (provide 'sly-agent-q-context)
 ;;; sly-agent-q-context.el ends here
