@@ -117,5 +117,83 @@
              (lambda (&optional _maybe-prompt _dir) nil)))
     (should (null (agent-q--file-candidates "test")))))
 
+;;;; Task 3: Symbol Candidates
+
+(ert-deftest agent-q-context/candidates/symbol-returns-list ()
+  "Test that symbol candidates returns a list."
+  (let ((candidates (agent-q--symbol-candidates "")))
+    (should (listp candidates))))
+
+(ert-deftest agent-q-context/candidates/symbol-from-lisp-buffers ()
+  "Test that symbols are gathered from Lisp buffers."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun test-symbol-foo () 42)\n")
+    (insert "(defvar test-symbol-bar 123)\n")
+    ;; Force imenu to scan
+    (setq imenu--index-alist nil)
+    (let ((candidates (agent-q--symbol-candidates "test-symbol")))
+      ;; Should find at least our function
+      (should (cl-some (lambda (c) (string-prefix-p "test-symbol" c t))
+                       candidates)))))
+
+(ert-deftest agent-q-context/candidates/symbol-has-properties ()
+  "Test that symbol candidates have required text properties."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun my-test-fn () nil)\n")
+    (setq imenu--index-alist nil)
+    (let* ((candidates (agent-q--symbol-candidates "my-test"))
+           (candidate (car candidates)))
+      (when candidate
+        (should (eq :symbol (get-text-property 0 'agent-q-context-type candidate)))
+        (should (plist-get (get-text-property 0 'agent-q-context-data candidate) :name))))))
+
+(ert-deftest agent-q-context/candidates/symbol-limits-results ()
+  "Test that symbol candidates are limited to prevent overwhelming completions."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    ;; Insert many definitions
+    (dotimes (i 100)
+      (insert (format "(defun test-limit-fn-%d () nil)\n" i)))
+    (setq imenu--index-alist nil)
+    (let ((candidates (agent-q--symbol-candidates "test-limit")))
+      ;; Should be capped at 50
+      (should (<= (length candidates) 50)))))
+
+(ert-deftest agent-q-context/candidates/symbol-has-position ()
+  "Test that symbol candidates include position data."
+  (with-temp-buffer
+    (emacs-lisp-mode)
+    (insert "(defun my-pos-test-fn () nil)\n")
+    (setq imenu--index-alist nil)
+    (let* ((candidates (agent-q--symbol-candidates "my-pos-test"))
+           (candidate (car candidates)))
+      (when candidate
+        (let ((data (get-text-property 0 'agent-q-context-data candidate)))
+          (should (plist-get data :position)))))))
+
+(ert-deftest agent-q-context/flatten-imenu/handles-nested ()
+  "Test that flatten-imenu handles nested imenu structures."
+  (let* ((nested '(("Functions"
+                    ("test-nested-a" . 10)
+                    ("test-nested-b" . 20))
+                   ("Variables"
+                    ("test-nested-c" . 30))))
+         (result (agent-q--flatten-imenu nested "test-nested")))
+    (should (= 3 (length result)))
+    (should (cl-every (lambda (c) (string-prefix-p "test-nested" c t))
+                      result))))
+
+(ert-deftest agent-q-context/flatten-imenu/filters-by-prefix ()
+  "Test that flatten-imenu filters by prefix."
+  (let* ((index '(("alpha-fn" . 10)
+                  ("beta-fn" . 20)
+                  ("alpha-var" . 30)))
+         (alpha-result (agent-q--flatten-imenu index "alpha"))
+         (beta-result (agent-q--flatten-imenu index "beta")))
+    (should (= 2 (length alpha-result)))
+    (should (= 1 (length beta-result)))))
+
 (provide 'sly-agent-q-context-test)
 ;;; sly-agent-q-context-test.el ends here
