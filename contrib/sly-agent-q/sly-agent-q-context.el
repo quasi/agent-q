@@ -28,6 +28,24 @@
 (require 'seq)
 (require 'imenu)
 
+;;; Customization Group
+
+(defgroup agent-q-context nil
+  "Context management for Agent-Q chat."
+  :group 'agent-q
+  :prefix "agent-q-context-")
+
+;;; Faces
+
+(defface agent-q-context-pill-face
+  '((t :foreground "#61afef"
+       :background "#3e4451"
+       :box (:line-width -1 :color "#61afef")
+       :weight bold))
+  "Face for context pills in input.
+Used to highlight [@name] pills that represent attached context items."
+  :group 'agent-q-context)
+
 ;;; Constants
 
 (defconst agent-q-context-max-size 50000
@@ -214,6 +232,91 @@ or nil if the source cannot be read."
             start
             (min end (+ start agent-q-context-max-size)))))))
     (_ nil)))
+
+;;; Context Pill Rendering
+
+(defvar agent-q-context-pill-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map [mouse-1] #'agent-q-context-pill-click)
+    (define-key map (kbd "RET") #'agent-q-context-pill-visit)
+    (define-key map (kbd "DEL") #'agent-q-context-pill-remove)
+    (define-key map (kbd "?") #'agent-q-context-pill-describe)
+    map)
+  "Keymap for context pills.
+Provides bindings for interacting with context items displayed as pills.")
+
+(defun agent-q--context-pill-tooltip (item)
+  "Generate tooltip string for context ITEM.
+Returns a human-readable description including type and key data."
+  (let ((type (agent-q-context-item-type item))
+        (data (agent-q-context-item-data item)))
+    (pcase type
+      (:file (format "File: %s" (or (plist-get data :path) "unknown")))
+      (:symbol (format "Symbol: %s" (or (plist-get data :name) "unknown")))
+      (:buffer (format "Buffer: %s" (or (plist-get data :buffer-name) "unknown")))
+      (:region (format "Region in %s" (or (plist-get data :buffer) "unknown")))
+      (:url (format "URL: %s" (or (plist-get data :url) "unknown")))
+      (_ "Context item"))))
+
+(defun agent-q--insert-context-pill (item)
+  "Insert visual pill for context ITEM at point.
+The pill is formatted as [@display-name] and has text properties for:
+- face: `agent-q-context-pill-face'
+- keymap: `agent-q-context-pill-map'
+- help-echo: tooltip from `agent-q--context-pill-tooltip'
+- agent-q-context-item: the ITEM struct for later access"
+  (let ((display-name (agent-q-context-item-display-name item)))
+    (insert (propertize (format "[@%s]" display-name)
+                        'face 'agent-q-context-pill-face
+                        'agent-q-context-item item
+                        'read-only t
+                        'rear-nonsticky t
+                        'mouse-face 'highlight
+                        'keymap agent-q-context-pill-map
+                        'help-echo (agent-q--context-pill-tooltip item)))
+    (insert " ")))
+
+;; Placeholder pill commands (to be fully implemented in later tasks)
+
+(defun agent-q-context-pill-click (event)
+  "Handle click on context pill.
+EVENT is the mouse event."
+  (interactive "e")
+  (let* ((pos (posn-point (event-end event)))
+         (item (get-text-property pos 'agent-q-context-item)))
+    (if item
+        (message "Context: %s" (agent-q--context-pill-tooltip item))
+      (message "No context item at click position"))))
+
+(defun agent-q-context-pill-visit ()
+  "Visit source of context pill at point."
+  (interactive)
+  (if-let ((item (get-text-property (point) 'agent-q-context-item)))
+      (let ((type (agent-q-context-item-type item))
+            (data (agent-q-context-item-data item)))
+        (pcase type
+          (:file (when-let ((path (plist-get data :path)))
+                   (find-file path)))
+          (:buffer (when-let ((buf (plist-get data :buffer-name)))
+                     (switch-to-buffer buf)))
+          (:symbol (when-let ((pos (plist-get data :position)))
+                     (when (markerp pos)
+                       (switch-to-buffer (marker-buffer pos))
+                       (goto-char pos))))
+          (_ (message "Cannot visit this context type"))))
+    (message "No context item at point")))
+
+(defun agent-q-context-pill-remove ()
+  "Remove context pill at point."
+  (interactive)
+  (message "Remove not yet implemented"))
+
+(defun agent-q-context-pill-describe ()
+  "Describe context pill at point."
+  (interactive)
+  (if-let ((item (get-text-property (point) 'agent-q-context-item)))
+      (message "%s" (agent-q--context-pill-tooltip item))
+    (message "No context item at point")))
 
 (provide 'sly-agent-q-context)
 ;;; sly-agent-q-context.el ends here

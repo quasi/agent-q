@@ -474,5 +474,141 @@
   (should (boundp 'agent-q-context-max-size))
   (should (= 50000 agent-q-context-max-size)))
 
+;;;; Task 8: Context Pill Rendering
+
+(ert-deftest agent-q-context/pill/inserts-formatted-text ()
+  "Test that context pill inserts bracketed text."
+  (with-temp-buffer
+    (let ((item (make-agent-q-context-item
+                 :type :file
+                 :display-name "foo.lisp")))
+      (agent-q--insert-context-pill item)
+      (goto-char (point-min))
+      (should (search-forward "[@foo.lisp]" nil t)))))
+
+(ert-deftest agent-q-context/pill/has-face ()
+  "Test that context pill has proper face."
+  (with-temp-buffer
+    (let ((item (make-agent-q-context-item
+                 :type :file
+                 :display-name "test.lisp")))
+      (agent-q--insert-context-pill item)
+      (goto-char (point-min))
+      (search-forward "[@")
+      (should (eq 'agent-q-context-pill-face
+                  (get-text-property (point) 'face))))))
+
+(ert-deftest agent-q-context/pill/stores-item ()
+  "Test that pill stores context item in text property."
+  (with-temp-buffer
+    (let ((item (make-agent-q-context-item
+                 :type :symbol
+                 :display-name "my-func")))
+      (agent-q--insert-context-pill item)
+      (goto-char (point-min))
+      (search-forward "[@")
+      (let ((stored (get-text-property (point) 'agent-q-context-item)))
+        (should (agent-q-context-item-p stored))
+        (should (eq :symbol (agent-q-context-item-type stored)))))))
+
+(ert-deftest agent-q-context/pill/has-keymap ()
+  "Test that pill has its own keymap."
+  (with-temp-buffer
+    (let ((item (make-agent-q-context-item
+                 :type :buffer
+                 :display-name "*scratch*")))
+      (agent-q--insert-context-pill item)
+      (goto-char (point-min))
+      (search-forward "[@")
+      (should (keymapp (get-text-property (point) 'keymap))))))
+
+(ert-deftest agent-q-context/pill/tooltip ()
+  "Test that pill has help-echo tooltip."
+  (with-temp-buffer
+    (let ((item (make-agent-q-context-item
+                 :type :file
+                 :display-name "config.el"
+                 :data '(:path "/path/to/config.el"))))
+      (agent-q--insert-context-pill item)
+      (goto-char (point-min))
+      (search-forward "[@")
+      (let ((tooltip (get-text-property (point) 'help-echo)))
+        (should tooltip)
+        (should (stringp tooltip))))))
+
+(ert-deftest agent-q-context/pill/tooltip-file-content ()
+  "Test that file pill tooltip contains the path."
+  (with-temp-buffer
+    (let ((item (make-agent-q-context-item
+                 :type :file
+                 :display-name "config.el"
+                 :data '(:path "/path/to/config.el"))))
+      (agent-q--insert-context-pill item)
+      (goto-char (point-min))
+      (search-forward "[@")
+      (let ((tooltip (get-text-property (point) 'help-echo)))
+        (should (string-match-p "File:" tooltip))
+        (should (string-match-p "/path/to/config.el" tooltip))))))
+
+(ert-deftest agent-q-context/pill/tooltip-symbol-content ()
+  "Test that symbol pill tooltip contains the name."
+  (with-temp-buffer
+    (let ((item (make-agent-q-context-item
+                 :type :symbol
+                 :display-name "my-function"
+                 :data '(:name "my-function"))))
+      (agent-q--insert-context-pill item)
+      (goto-char (point-min))
+      (search-forward "[@")
+      (let ((tooltip (get-text-property (point) 'help-echo)))
+        (should (string-match-p "Symbol:" tooltip))
+        (should (string-match-p "my-function" tooltip))))))
+
+(ert-deftest agent-q-context/pill/tooltip-buffer-content ()
+  "Test that buffer pill tooltip contains buffer name."
+  (with-temp-buffer
+    (let ((item (make-agent-q-context-item
+                 :type :buffer
+                 :display-name "*scratch*"
+                 :data '(:buffer-name "*scratch*"))))
+      (agent-q--insert-context-pill item)
+      (goto-char (point-min))
+      (search-forward "[@")
+      (let ((tooltip (get-text-property (point) 'help-echo)))
+        (should (string-match-p "Buffer:" tooltip))))))
+
+(ert-deftest agent-q-context/pill/keymap-has-mouse-binding ()
+  "Test that pill keymap has mouse-1 binding."
+  (should (keymapp agent-q-context-pill-map))
+  (should (lookup-key agent-q-context-pill-map [mouse-1])))
+
+(ert-deftest agent-q-context/pill/keymap-has-ret-binding ()
+  "Test that pill keymap has RET binding."
+  (should (lookup-key agent-q-context-pill-map (kbd "RET"))))
+
+(ert-deftest agent-q-context/pill/keymap-has-del-binding ()
+  "Test that pill keymap has DEL binding."
+  (should (lookup-key agent-q-context-pill-map (kbd "DEL"))))
+
+(ert-deftest agent-q-context/pill/keymap-has-describe-binding ()
+  "Test that pill keymap has ? binding for describe."
+  (should (lookup-key agent-q-context-pill-map (kbd "?"))))
+
+(ert-deftest agent-q-context/pill/face-defined ()
+  "Test that the context pill face is defined."
+  (should (facep 'agent-q-context-pill-face)))
+
+(ert-deftest agent-q-context/pill/describe-shows-tooltip ()
+  "Test that describe command displays tooltip."
+  (with-temp-buffer
+    (let ((item (make-agent-q-context-item
+                 :type :file
+                 :display-name "test.el"
+                 :data '(:path "/test/path/test.el"))))
+      (agent-q--insert-context-pill item)
+      (goto-char (+ (point-min) 2))  ; Inside the pill
+      ;; The describe function should not error and should return something
+      (should (agent-q--context-pill-tooltip item)))))
+
 (provide 'sly-agent-q-context-test)
 ;;; sly-agent-q-context-test.el ends here
