@@ -108,5 +108,16 @@ Each candidate has `agent-q-context-type' set to :buffer and
                                (string-prefix-p prefix name t))))
                       (buffer-list))))
 
+;;; @-Mention Detection
+
+(defun agent-q--context-mention-bounds ()
+  "Return bounds of @-mention at point, or nil.
+Returns (START . END) where START is position of @ and END is point.
+Only detects @-mentions on the current line."
+  (save-excursion
+    (let ((end (point)))
+      (when (re-search-backward "@\\([^ \t\n]*\\)" (line-beginning-position) t)
+        (cons (match-beginning 0) end)))))
+
 (provide 'sly-agent-q-context)
 ;;; sly-agent-q-context.el ends here

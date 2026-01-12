@@ -233,5 +233,47 @@
                                      :buffer-name))))
       (kill-buffer "agent-q-prop-test"))))
 
+;;;; Task 5: @-mention Bounds Detection
+
+(ert-deftest agent-q-context/mention/detects-at-symbol ()
+  "Test detecting @ at beginning of mention."
+  (with-temp-buffer
+    (insert "Hello @fo")
+    (should (agent-q--context-mention-bounds))
+    (let ((bounds (agent-q--context-mention-bounds)))
+      (should (= (car bounds) 7))  ; Position of @
+      (should (= (cdr bounds) 10))))) ; Position after 'o'
+
+(ert-deftest agent-q-context/mention/returns-nil-without-at ()
+  "Test that nil is returned when no @ present."
+  (with-temp-buffer
+    (insert "Hello world")
+    (should-not (agent-q--context-mention-bounds))))
+
+(ert-deftest agent-q-context/mention/handles-empty-prefix ()
+  "Test detecting @ with no prefix yet."
+  (with-temp-buffer
+    (insert "Hello @")
+    (let ((bounds (agent-q--context-mention-bounds)))
+      (should bounds)
+      (should (= (car bounds) 7))
+      (should (= (cdr bounds) 8)))))
+
+(ert-deftest agent-q-context/mention/stays-on-current-line ()
+  "Test that detection doesn't cross line boundaries."
+  (with-temp-buffer
+    (insert "@previous\nworld")
+    (goto-char (point-max))
+    (should-not (agent-q--context-mention-bounds))))
+
+(ert-deftest agent-q-context/mention/handles-mid-line ()
+  "Test detecting @ in middle of line."
+  (with-temp-buffer
+    (insert "See @file.lisp for details")
+    (goto-char 15)  ; After ".lisp"
+    (let ((bounds (agent-q--context-mention-bounds)))
+      (should bounds)
+      (should (= (car bounds) 5))))) ; Position of @
+
 (provide 'sly-agent-q-context-test)
 ;;; sly-agent-q-context-test.el ends here
