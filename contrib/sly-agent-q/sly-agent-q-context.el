@@ -540,5 +540,37 @@ prompts for the specific item. Adds the created item to
           (agent-q--refresh-context-panel)))
       (message "Added %s to context" (agent-q-context-item-display-name item)))))
 
+;;; LLM Integration
+
+(defun agent-q--format-context-for-llm ()
+  "Format current context items for LLM prompt.
+Returns a string containing all context items formatted as a <context>
+block with markdown-style headers and code fences, or nil if no context
+items are present.
+
+The format is:
+  <context>
+  ### display-name (type)
+  ```
+  content
+  ```
+  </context>
+
+Context items are presented in reverse order (oldest first) since they
+were accumulated with `push'."
+  (when agent-q-context-items
+    (concat
+     "\n\n<context>\n"
+     (mapconcat
+      (lambda (item)
+        (format "### %s (%s)\n```\n%s\n```\n"
+                (agent-q-context-item-display-name item)
+                (agent-q-context-item-type item)
+                (or (agent-q-context-item-content item)
+                    "(content unavailable)")))
+      (reverse agent-q-context-items)
+      "\n")
+     "</context>\n")))
+
 (provide 'sly-agent-q-context)
 ;;; sly-agent-q-context.el ends here

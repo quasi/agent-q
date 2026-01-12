@@ -922,5 +922,73 @@
       (should (= 1 (length agent-q-context-items)))
       (should (eq :buffer (agent-q-context-item-type (car agent-q-context-items)))))))
 
+;;;; Task 11: Chat Integration
+
+(ert-deftest agent-q-context/integration/format-for-llm ()
+  "Test formatting context items for LLM prompt."
+  (let ((agent-q-context-items
+         (list (make-agent-q-context-item
+                :type :file
+                :display-name "test.lisp"
+                :content "(defun test () 42)"))))
+    (let ((formatted (agent-q--format-context-for-llm)))
+      (should (stringp formatted))
+      (should (string-match-p "<context>" formatted))
+      (should (string-match-p "test.lisp" formatted))
+      (should (string-match-p "(defun test () 42)" formatted)))))
+
+(ert-deftest agent-q-context/integration/empty-context-returns-nil ()
+  "Test that empty context returns nil, not empty string."
+  (let ((agent-q-context-items nil))
+    (should-not (agent-q--format-context-for-llm))))
+
+(ert-deftest agent-q-context/integration/multiple-items ()
+  "Test formatting multiple context items."
+  (let ((agent-q-context-items
+         (list (make-agent-q-context-item
+                :type :file
+                :display-name "a.lisp"
+                :content "content-a")
+               (make-agent-q-context-item
+                :type :buffer
+                :display-name "*scratch*"
+                :content "content-b"))))
+    (let ((formatted (agent-q--format-context-for-llm)))
+      (should (string-match-p "a.lisp" formatted))
+      (should (string-match-p "\\*scratch\\*" formatted))
+      (should (string-match-p "content-a" formatted))
+      (should (string-match-p "content-b" formatted)))))
+
+(ert-deftest agent-q-context/integration/format-includes-closing-tag ()
+  "Test that formatted context includes closing </context> tag."
+  (let ((agent-q-context-items
+         (list (make-agent-q-context-item
+                :type :file
+                :display-name "test.lisp"
+                :content "test"))))
+    (let ((formatted (agent-q--format-context-for-llm)))
+      (should (string-match-p "</context>" formatted)))))
+
+(ert-deftest agent-q-context/integration/format-includes-type ()
+  "Test that formatted context includes item type."
+  (let ((agent-q-context-items
+         (list (make-agent-q-context-item
+                :type :file
+                :display-name "test.lisp"
+                :content "content"))))
+    (let ((formatted (agent-q--format-context-for-llm)))
+      (should (string-match-p ":file\\|file" formatted)))))
+
+(ert-deftest agent-q-context/integration/format-handles-nil-content ()
+  "Test that formatted context handles items with nil content."
+  (let ((agent-q-context-items
+         (list (make-agent-q-context-item
+                :type :file
+                :display-name "test.lisp"
+                :content nil))))
+    (let ((formatted (agent-q--format-context-for-llm)))
+      (should (stringp formatted))
+      (should (string-match-p "unavailable\\|nil\\|empty" formatted)))))
+
 (provide 'sly-agent-q-context-test)
 ;;; sly-agent-q-context-test.el ends here

@@ -28,6 +28,7 @@
 
 (require 'cl-lib)
 (require 'sly)
+(require 'sly-agent-q-context)
 ;; Note: sly-agent-q-sessions is required AFTER struct definitions below
 
 ;;; Customization
@@ -805,13 +806,16 @@ Unlike streaming, this renders the complete message at once."
 ;;; SLY Integration
 
 (defun agent-q--send-to-agent (content)
-  "Send CONTENT to the Lisp agent via SLY."
-  (agent-q--begin-assistant-response)
-  ;; Call existing RPC endpoint
-  (sly-eval-async
-      `(agent-q:agent-q-send ,content :include-context t)
-    (lambda (result)
-      (agent-q--finalize-response result))))
+  "Send CONTENT to the Lisp agent via SLY.
+Appends formatted context if any context items are present in
+`agent-q-context-items'."
+  (let ((full-content (concat content (agent-q--format-context-for-llm))))
+    (agent-q--begin-assistant-response)
+    ;; Call existing RPC endpoint
+    (sly-eval-async
+        `(agent-q:agent-q-send ,full-content :include-context t)
+      (lambda (result)
+        (agent-q--finalize-response result)))))
 
 (defun agent-q-chat-append-chunk (chunk)
   "Append streaming CHUNK from agent.
@@ -923,20 +927,6 @@ KILL and WINDOW are the arguments to `quit-window'."
     (set-marker agent-q--input-start-marker nil))
   (when agent-q--streaming-marker
     (set-marker agent-q--streaming-marker nil)))
-
-;;; Placeholder Commands (to be implemented in later phases)
-
-(defun agent-q-add-context ()
-  "Add context to the conversation.
-This will be implemented in Phase 4."
-  (interactive)
-  (message "Context commands will be available in Phase 4"))
-
-(defun agent-q-clear-context ()
-  "Clear accumulated context.
-This will be implemented in Phase 4."
-  (interactive)
-  (message "Context commands will be available in Phase 4"))
 
 ;;; Entry Point
 
