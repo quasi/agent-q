@@ -23,6 +23,9 @@ Agent-Q is an intelligent assistant that integrates with SLY/Emacs to provide co
 - 💾 **Session management** - Persistent sessions with SQLite storage
 - 📝 **Rich markdown** - Beautiful rendering with syntax highlighting in chat
 - 🌊 **Streaming responses** - Real-time token-by-token display
+- 🎯 **@-mention completion** - Inline completion for files, symbols, and buffers
+- 📎 **Context pills** - Visual indicators for attached context with hover previews
+- 📋 **Context panel** - Sidebar showing all attached context items
 - ⏳ **Planned**: Condition system integration, test framework integration, knowledge base
 
 ## Prerequisites
@@ -133,6 +136,44 @@ Agent-Q will automatically include these instructions when working in that proje
 4. **Ask questions** - Send messages to get help
 5. **Insert responses** - Paste agent suggestions into your code
 
+### @-Mention Completion (New!)
+
+Agent-Q now supports inline completion for attaching context to your messages. In the chat input, type `@` followed by the beginning of a filename, symbol, or buffer name:
+
+**Attaching Files:**
+```
+> @src/agen TAB
+```
+Completes to file candidates: `@src/agent.lisp`, `@src/agent-q.asd`, etc.
+
+**Attaching Symbols:**
+```
+> @defun fib TAB
+```
+Completes to Lisp symbols: `@fibonacci`, `@fib-helper`, etc.
+
+**Attaching Buffers:**
+```
+> @buffer *mes TAB
+```
+Completes to open buffers: `@*messages*`, `@*scratch*`, etc.
+
+**Visual Pills:**
+When you select a completion, it creates a visual pill `[@name]` in your message. These pills are:
+- **Clickable** - Press `RET` to visit the file/symbol/buffer
+- **Removable** - Press `DEL` to remove from context
+- **Hoverable** - Tooltip shows the first few lines of content
+
+**Context Panel:**
+Press `C-c @` to toggle the context panel sidebar, which shows:
+- All attached context items
+- Item types (file, symbol, buffer, region, url)
+- Quick actions (visit, remove)
+- Total context size
+
+**Content Limits:**
+Each context item is limited to 50KB to prevent overwhelming the LLM. Large files are truncated with a note indicating the size.
+
 ### Keybindings
 
 All Agent-Q commands are under the `C-c q` prefix:
@@ -143,6 +184,9 @@ All Agent-Q commands are under the `C-c q` prefix:
 - `C-c q c d` - Add current defun to context
 - `C-c q c c` - Clear all context
 - `C-c q c s` - Show context summary
+- `C-c @` - Toggle context panel sidebar (in chat buffer)
+- `C-c C-x` - Clear all context items (in chat buffer)
+- `@` - Start @-mention completion (in chat input)
 
 #### Conversation
 - `C-c q s` - Send message to agent
@@ -322,6 +366,7 @@ agent-q/
 │   └── sly-agent-q/               # Emacs integration
 │       ├── sly-agent-q.el         # Core minor mode
 │       ├── sly-agent-q-chat.el    # Chat interface with markdown
+│       ├── sly-agent-q-context.el # @-mention completion and context management
 │       ├── sly-agent-q-sessions.el # Session management UI
 │       ├── sly-agent-q-tools.el   # Tool execution UI
 │       ├── sly-agent-q-diff.el    # Diff approval interface
@@ -363,7 +408,10 @@ MIT License - see LICENSE file for details
 **Status**: Phase 1 Complete ✅ | Phase 2 In Progress 🔄 | Phase 3 Partial 🔄
 
 **Recent Additions:**
+- @-mention completion for inline context attachment (files, symbols, buffers)
+- Context pills with visual indicators and hover previews
+- Context panel sidebar for managing attached context
 - Comprehensive chat interface with markdown rendering and streaming
 - Session management with SQLite persistence
 - Tool system with introspection, execution, and diff approval
-- Full test suite for Elisp components
+- Full test suite for Elisp components (155 tests, 150 passing)
