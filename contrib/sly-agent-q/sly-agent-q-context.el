@@ -175,6 +175,31 @@ Returns a string like \" [file]\" for display in completion UI."
       (:url " [url]")
       (_ ""))))
 
+(defun agent-q--context-exit-function (candidate status)
+  "Handle completion exit for CANDIDATE with STATUS.
+When STATUS is 'finished, creates context item and inserts pill.
+This function is called by the completion framework after the user
+selects a candidate."
+  (when (eq status 'finished)
+    (let* ((type (get-text-property 0 'agent-q-context-type candidate))
+           (data (get-text-property 0 'agent-q-context-data candidate))
+           (item (make-agent-q-context-item
+                  :type type
+                  :display-name candidate
+                  :data data
+                  :content (agent-q--fetch-context-content type data))))
+      ;; Add to context list
+      (push item agent-q-context-items)
+      ;; Replace @mention text with pill
+      (let ((bounds (agent-q--context-mention-bounds)))
+        (when bounds
+          (delete-region (car bounds) (cdr bounds))
+          (agent-q--insert-context-pill item)))
+      ;; Refresh panel if visible
+      (when (get-buffer-window agent-q-context-panel-buffer)
+        (with-current-buffer agent-q-context-panel-buffer
+          (agent-q--refresh-context-panel))))))
+
 (defun agent-q-context-complete-at-point ()
   "Completion-at-point function for @-mentions.
 Returns completion data when point is after an @-mention, nil otherwise.
@@ -184,7 +209,8 @@ Works with any completion framework (vertico, ivy, helm, default)."
           (cdr bounds)
           (completion-table-dynamic #'agent-q--context-candidates)
           :exclusive 'no
-          :annotation-function #'agent-q--context-annotation)))
+          :annotation-function #'agent-q--context-annotation
+          :exit-function #'agent-q--context-exit-function)))
 
 ;;; @-Mention Detection
 
@@ -571,6 +597,15 @@ were accumulated with `push'."
       (reverse agent-q-context-items)
       "\n")
      "</context>\n")))
+
+;;; Mode Setup
+
+(defun agent-q-context-setup ()
+  "Set up context completion for current buffer.
+Adds `agent-q-context-complete-at-point' to `completion-at-point-functions'.
+Call this from `agent-q-chat-mode-hook' or similar initialization."
+  (add-to-list 'completion-at-point-functions
+               #'agent-q-context-complete-at-point))
 
 (provide 'sly-agent-q-context)
 ;;; sly-agent-q-context.el ends here

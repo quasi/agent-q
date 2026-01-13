@@ -339,6 +339,9 @@ The buffer is divided into two regions:
   ;; Initialize session management (auto-save, mode line)
   (agent-q-sessions-initialize)
 
+  ;; Set up context completion for @-mentions
+  (agent-q-context-setup)
+
   ;; Display current provider/model configuration
   (agent-q--display-config-info)
 

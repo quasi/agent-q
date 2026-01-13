@@ -990,5 +990,50 @@
       (should (stringp formatted))
       (should (string-match-p "unavailable\\|nil\\|empty" formatted)))))
 
+;;;; Task 12: Completion Hook Integration
+
+(ert-deftest agent-q-context/hook/capf-in-functions-list ()
+  "Test that CAPF is added to completion-at-point-functions."
+  (with-temp-buffer
+    (agent-q-context-setup)
+    (should (memq #'agent-q-context-complete-at-point
+                  completion-at-point-functions))))
+
+(ert-deftest agent-q-context/hook/setup-function-exists ()
+  "Test that context setup function is defined."
+  (should (fboundp 'agent-q-context-setup)))
+
+(ert-deftest agent-q-context/hook/exit-function-creates-item ()
+  "Test that completing @-mention creates context item."
+  (with-temp-buffer
+    (setq agent-q-context-items nil)
+    ;; Simulate completion exit
+    (let* ((temp-file (make-temp-file "agent-q-exit-test"))
+           (candidate (propertize "test.lisp"
+                                  'agent-q-context-type :file
+                                  'agent-q-context-data (list :path temp-file))))
+      (unwind-protect
+          (progn
+            (insert "@test")
+            (agent-q--context-exit-function candidate 'finished)
+            (should (= 1 (length agent-q-context-items))))
+        (delete-file temp-file)))))
+
+(ert-deftest agent-q-context/hook/exit-function-inserts-pill ()
+  "Test that exit function inserts pill after completion."
+  (with-temp-buffer
+    (setq agent-q-context-items nil)
+    (let* ((temp-file (make-temp-file "agent-q-pill-test"))
+           (candidate (propertize "test.lisp"
+                                  'agent-q-context-type :file
+                                  'agent-q-context-data (list :path temp-file))))
+      (unwind-protect
+          (progn
+            (insert "@test")
+            (agent-q--context-exit-function candidate 'finished)
+            (goto-char (point-min))
+            (should (search-forward "[@test.lisp]" nil t)))
+        (delete-file temp-file)))))
+
 (provide 'sly-agent-q-context-test)
 ;;; sly-agent-q-context-test.el ends here
