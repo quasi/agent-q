@@ -32,6 +32,7 @@
   (provide 'sly))
 
 ;; Load all modules being tested
+(require 'sly-agent-q-context)
 (require 'sly-agent-q-diff)
 (require 'sly-agent-q-chat)
 (require 'sly-agent-q-sessions)

@@ -25,6 +25,7 @@
 (require 'sly-agent-q-chat-test)
 (require 'sly-agent-q-sessions-test)
 (require 'sly-agent-q-diff-test)
+(require 'sly-agent-q-context-test)
 
 (message "\n========================================")
 (message "Running sly-agent-q test suite")
