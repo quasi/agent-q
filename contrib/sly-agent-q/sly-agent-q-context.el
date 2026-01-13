@@ -604,6 +604,8 @@ were accumulated with `push'."
   "Set up context completion for current buffer.
 Adds `agent-q-context-complete-at-point' to `completion-at-point-functions'.
 Call this from `agent-q-chat-mode-hook' or similar initialization."
+  ;; Make completion-at-point-functions buffer-local and add our CAPF
+  (make-local-variable 'completion-at-point-functions)
   (add-to-list 'completion-at-point-functions
                #'agent-q-context-complete-at-point))
 

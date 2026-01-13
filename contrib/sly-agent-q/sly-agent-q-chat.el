@@ -578,7 +578,9 @@ Inserts the [AGENT-Q] header and sets up the streaming marker."
     (save-excursion
       (goto-char agent-q--streaming-marker)
       (let ((inhibit-read-only t))
-        (insert chunk)))))
+        (insert chunk)))
+    ;; Force immediate display update for streaming
+    (redisplay t)))
 
 (defun agent-q--finalize-response (full-content)
   "Finalize the assistant response with FULL-CONTENT.
@@ -640,7 +642,10 @@ response into other buffers with `sly-agent-q-insert-last-response'."
 
   ;; Clean up state
   (setq agent-q--pending-response nil)
-  (setq agent-q--streaming-marker nil))
+  (setq agent-q--streaming-marker nil)
+
+  ;; Force display update after async response
+  (redisplay t))
 
 ;;; Markdown Rendering
 
@@ -864,7 +869,9 @@ Works whether or not streaming is in progress."
         (goto-char agent-q--output-end-marker)
         (let ((inhibit-read-only t))
           (insert text)
-          (set-marker agent-q--output-end-marker (point)))))))
+          (set-marker agent-q--output-end-marker (point))))
+      ;; Force display update
+      (redisplay t))))
 
 (defun agent-q-chat-tool-start (tool-name &optional details)
   "Notify chat that TOOL-NAME is starting.
@@ -941,7 +948,9 @@ KILL and WINDOW are the arguments to `quit-window'."
     (with-current-buffer buf
       (unless (eq major-mode 'agent-q-chat-mode)
         (agent-q-chat-mode)))
-    (pop-to-buffer buf)))
+    (pop-to-buffer buf)
+    ;; Position cursor in input region
+    (goto-char agent-q--input-start-marker)))
 
 (defun agent-q-chat-send-message (message &optional include-context)
   "Send MESSAGE through the chat interface programmatically.
