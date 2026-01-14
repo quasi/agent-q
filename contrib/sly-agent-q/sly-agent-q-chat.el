@@ -840,23 +840,26 @@ Prepares the chat buffer for incremental text.
 This function is called from Common Lisp via `slynk:eval-in-emacs'."
   (when-let ((buf (get-buffer agent-q-chat-buffer-name)))
     (with-current-buffer buf
-      ;; Initialize streaming state
-      (setq agent-q--pending-response t)
-      ;; Insert assistant header at output end
-      (save-excursion
-        (goto-char agent-q--output-end-marker)
-        (let ((inhibit-read-only t))
-          (insert (propertize "[AGENT-Q]" 'face 'agent-q-assistant-header-face))
-          (insert " ")
-          (insert (propertize (format-time-string "%H:%M:%S")
-                              'face 'agent-q-timestamp-face))
-          (insert "\n")
-          ;; Set streaming marker for chunk insertion
-          (setq agent-q--streaming-marker (point-marker))
-          (set-marker-insertion-type agent-q--streaming-marker t)
-          (set-marker agent-q--output-end-marker (point))))
-      ;; Force immediate display update
-      (redisplay t))))
+      ;; Guard: markers must be initialized
+      (when (and agent-q--output-end-marker
+                 (marker-position agent-q--output-end-marker))
+        ;; Initialize streaming state
+        (setq agent-q--pending-response t)
+        ;; Insert assistant header at output end
+        (save-excursion
+          (goto-char agent-q--output-end-marker)
+          (let ((inhibit-read-only t))
+            (insert (propertize "[AGENT-Q]" 'face 'agent-q-assistant-header-face))
+            (insert " ")
+            (insert (propertize (format-time-string "%H:%M:%S")
+                                'face 'agent-q-timestamp-face))
+            (insert "\n")
+            ;; Set streaming marker for chunk insertion
+            (setq agent-q--streaming-marker (point-marker))
+            (set-marker-insertion-type agent-q--streaming-marker t)
+            (set-marker agent-q--output-end-marker (point))))
+        ;; Force immediate display update
+        (redisplay t)))))
 
 (defun agent-q--update-token-usage (prompt-tokens completion-tokens)
   "Called with token counts from streaming response.
@@ -865,11 +868,21 @@ COMPLETION-TOKENS is the number of output tokens.
 This function is called from Common Lisp via `slynk:eval-in-emacs'."
   (when-let ((buf (get-buffer agent-q-chat-buffer-name)))
     (with-current-buffer buf
-      (when agent-q--current-session
-        ;; Accumulate token usage in session
-        (when (and prompt-tokens completion-tokens)
+      (when (and prompt-tokens completion-tokens)
+        ;; Accumulate token usage in session struct
+        (when agent-q--current-session
           (agent-q-session-add-tokens agent-q--current-session
-                                      prompt-tokens completion-tokens))))))
+                                      prompt-tokens completion-tokens))
+        ;; Update buffer-local display variables
+        (setq agent-q--session-input-tokens
+              (+ (or agent-q--session-input-tokens 0) prompt-tokens))
+        (setq agent-q--session-output-tokens
+              (+ (or agent-q--session-output-tokens 0) completion-tokens))
+        ;; Refresh header line
+        (agent-q--update-header-line)
+        ;; Force display update (async from CL)
+        (force-mode-line-update)
+        (redisplay t)))))
 
 (defun agent-q--streaming-error (error-message)
   "Called when streaming encounters an error.
@@ -877,14 +890,21 @@ ERROR-MESSAGE is the error description string.
 This function is called from Common Lisp via `slynk:eval-in-emacs'."
   (when-let ((buf (get-buffer agent-q-chat-buffer-name)))
     (with-current-buffer buf
-      (save-excursion
-        (goto-char (or agent-q--streaming-marker agent-q--output-end-marker))
-        (let ((inhibit-read-only t))
-          (insert "\n")
-          (insert (propertize (format "[Error: %s]" error-message)
-                              'face 'error))
-          (insert "\n\n")
-          (set-marker agent-q--output-end-marker (point))))
+      ;; Guard: need at least one valid marker to insert at
+      (let ((insert-pos (or (and agent-q--streaming-marker
+                                 (marker-position agent-q--streaming-marker))
+                            (and agent-q--output-end-marker
+                                 (marker-position agent-q--output-end-marker)))))
+        (when insert-pos
+          (save-excursion
+            (goto-char insert-pos)
+            (let ((inhibit-read-only t))
+              (insert "\n")
+              (insert (propertize (format "[Error: %s]" error-message)
+                                  'face 'error))
+              (insert "\n\n")
+              (when agent-q--output-end-marker
+                (set-marker agent-q--output-end-marker (point)))))))
       ;; Clean up streaming state
       (setq agent-q--pending-response nil)
       (when agent-q--streaming-marker
@@ -952,7 +972,10 @@ COST is optional and should be the session cost in USD."
         (setq agent-q--session-cost
               (+ (or agent-q--session-cost 0) cost)))
       ;; Update header line display
-      (agent-q--update-header-line))))
+      (agent-q--update-header-line)
+      ;; Force display update (async from CL)
+      (force-mode-line-update)
+      (redisplay t))))
 
 (defun agent-q--update-header-line ()
   "Update the header line with session info."
