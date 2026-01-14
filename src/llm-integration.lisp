@@ -25,6 +25,33 @@
      :tools tools
      :max-tokens 4096)))
 
+(defun send-to-llm-streaming (messages system-prompt
+                               &key (max-safety-level :moderate)
+                                    on-chunk
+                                    on-complete
+                                    on-error)
+  "Send messages to LLM with streaming enabled.
+
+   MESSAGES: List of message plists for the conversation
+   SYSTEM-PROMPT: System prompt string
+   MAX-SAFETY-LEVEL: Maximum safety level for tools
+   ON-CHUNK: Callback (lambda (chunk) ...) called for each chunk
+   ON-COMPLETE: Callback (lambda (full-content final-chunk) ...) called when done
+   ON-ERROR: Callback (lambda (error) ...) called on error
+
+   Returns: completion-stream object"
+  (let ((tools (agent-q.tools:get-agent-q-tools
+                :max-safety-level max-safety-level)))
+    (cl-llm-provider:complete-stream
+     messages
+     :provider *provider-instance*
+     :system system-prompt
+     :tools tools
+     :max-tokens 4096
+     :on-chunk on-chunk
+     :on-complete on-complete
+     :on-error on-error)))
+
 (defun execute-tool-calls-safe (response)
   "Execute tool calls from an LLM response.
 
