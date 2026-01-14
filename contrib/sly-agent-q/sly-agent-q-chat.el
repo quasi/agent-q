@@ -611,10 +611,11 @@ inserts a message separator.
 
 Also sets `sly-agent-q--last-response' so users can insert the
 response into other buffers with `sly-agent-q-insert-last-response'."
-  ;; Store in session
-  (let ((msg (agent-q-message--create :role 'assistant :content full-content)))
-    (push msg (agent-q-session-messages agent-q--current-session))
-    (setf (agent-q-session-updated-at agent-q--current-session) (current-time)))
+  ;; Store in session (if one is active)
+  (when agent-q--current-session
+    (let ((msg (agent-q-message--create :role 'assistant :content full-content)))
+      (push msg (agent-q-session-messages agent-q--current-session))
+      (setf (agent-q-session-updated-at agent-q--current-session) (current-time))))
 
   ;; Store as last response for insert/copy commands
   (when (and full-content (not (string-empty-p full-content)))
