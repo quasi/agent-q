@@ -94,6 +94,12 @@
    #:tool-results-to-messages
    #:build-messages-for-llm
 
+   ;; Streaming
+   #:*streaming-callback*
+   #:make-emacs-streaming-callback
+   #:make-emacs-complete-callback
+   #:make-emacs-error-callback
+
    ;; SLY interface
    #:agent-q-send
    #:agent-q-add-context

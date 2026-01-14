@@ -26,6 +26,7 @@
                                          (:file "buffer")
                                          (:file "diff")))
                             (:file "llm-integration")
+                            (:file "streaming")
                             (:file "agent")
                             (:file "sly-interface"))))
 
