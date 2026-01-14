@@ -27,6 +27,7 @@
                                          (:file "diff")))
                             (:file "llm-integration")
                             (:file "streaming")
+                            (:file "observability")
                             (:file "agent")
                             (:file "sly-interface"))))
 

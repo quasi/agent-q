@@ -101,6 +101,19 @@
    #:make-emacs-complete-callback
    #:make-emacs-error-callback
 
+   ;; Observability
+   #:*agent-q-hooks*
+   #:*request-log*
+   #:*observability-level*
+   #:setup-observability
+   #:teardown-observability
+   #:clear-request-log
+   #:get-request-log
+   #:get-request-stats
+   #:get-model-stats
+   #:format-stats
+   #:get-observability-info
+
    ;; SLY interface
    #:agent-q-send
    #:agent-q-add-context
