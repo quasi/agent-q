@@ -11,7 +11,7 @@
 
 (defvar *streaming-callback* nil
   "Global streaming callback for current request.
-   Function: (lambda (delta accumulated) ...)
+   Function: (lambda (chunk) ...)
 
    This variable can be bound dynamically to override the default
    streaming behavior during a request.")
@@ -36,20 +36,24 @@
   "Create a completion callback that notifies Emacs streaming is done.
 
    Returns a function suitable for cl-llm-provider's :on-complete callback.
-   The callback extracts token usage from the final chunk and sends it
-   to Emacs so the chat interface can finalize the response display.
+   The callback sends the full accumulated content to Emacs so the chat
+   interface can finalize the response display.
 
    The Elisp function `agent-q--finalize-response` is called with
-   prompt-tokens and completion-tokens (may be nil if unavailable)."
+   full-content. Token usage is sent separately via `agent-q--update-token-usage`
+   if available in the final chunk."
   (lambda (full-content final-chunk)
-    (declare (ignore full-content))
-    ;; Extract usage from final chunk if available
-    (let ((usage (when final-chunk
-                   (cl-llm-provider:chunk-usage final-chunk))))
-      (agent-q.tools:eval-in-emacs
-       `(agent-q--finalize-response
-         ,(when usage (getf usage :prompt-tokens))
-         ,(when usage (getf usage :completion-tokens)))))))
+    ;; Finalize the response with full content
+    (agent-q.tools:eval-in-emacs
+     `(agent-q--finalize-response ,full-content))
+    ;; Also send token usage if available
+    (when final-chunk
+      (let ((usage (cl-llm-provider:chunk-usage final-chunk)))
+        (when usage
+          (agent-q.tools:eval-in-emacs
+           `(agent-q--update-token-usage
+             ,(getf usage :prompt-tokens)
+             ,(getf usage :completion-tokens))))))))
 
 (defun make-emacs-error-callback ()
   "Create an error callback that notifies Emacs of streaming errors.
