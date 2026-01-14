@@ -22,10 +22,12 @@ Agent-Q is an intelligent assistant that integrates with SLY/Emacs to provide co
 ### Phase 3 (Partial) 🔄
 - 💾 **Session management** - Persistent sessions with SQLite storage
 - 📝 **Rich markdown** - Beautiful rendering with syntax highlighting in chat
-- 🌊 **Streaming responses** - Real-time token-by-token display
+- 🌊 **Streaming responses** - Real-time token-by-token display with progress feedback
 - 🎯 **@-mention completion** - Inline completion for files, symbols, and buffers
 - 📎 **Context pills** - Visual indicators for attached context with hover previews
 - 📋 **Context panel** - Sidebar showing all attached context items
+- 📊 **Observability** - Built-in logging, metrics, and cost tracking
+- 💰 **Cost estimation** - Pre-flight cost checks and budget enforcement
 - ⏳ **Planned**: Condition system integration, test framework integration, knowledge base
 
 ## Prerequisites
@@ -272,6 +274,68 @@ agent-q:*provider-instance*   ; => #<CL-LLM-PROVIDER:PROVIDER>
 (agent-q:agent-q-new-conversation :project "my-app")
 ```
 
+## Streaming and Observability
+
+### Real-Time Streaming
+
+Agent-Q streams LLM responses in real-time for a responsive experience:
+
+- **Incremental display** - Text appears as the model generates it
+- **Tool call indicators** - Debug messages show when tools are invoked
+- **Progress feedback** - Token counts update as streaming progresses
+- **Header line status** - Shows session info, token usage, and accumulated cost
+
+Streaming is automatic when using supported providers. Tool calls are handled with a sync fallback to ensure reliable tool execution.
+
+### Observability
+
+Built-in logging and metrics for monitoring LLM usage:
+
+```lisp
+;; Enable logging (levels: :none, :info, :debug)
+(agent-q:setup-observability :level :debug)
+
+;; Optional: log to file
+(agent-q:setup-observability :level :info
+                              :log-to-file "/tmp/agent-q.log")
+
+;; View request statistics
+(agent-q:get-request-stats)
+;; => (:TOTAL-REQUESTS 5 :TOTAL-TOKENS 1234 :AVG-TIMING-SECS 1.5)
+
+;; View per-model breakdown
+(agent-q:get-model-stats)
+;; => (("claude-sonnet-4-20250514" :REQUESTS 3 :TOKENS 800 :AVG-TIME 1.2)
+;;     ("gpt-4o-mini" :REQUESTS 2 :TOKENS 434 :AVG-TIME 0.8))
+
+;; Disable logging
+(agent-q:teardown-observability)
+```
+
+### Cost Estimation
+
+Track and control API costs:
+
+```lisp
+;; Estimate cost before sending
+(agent-q:estimate-request-cost "My prompt text here")
+;; => (:INPUT-COST 0.0012 :OUTPUT-COST 0.0015 :TOTAL-COST 0.0027
+;;     :INPUT-TOKENS 400 :OUTPUT-TOKENS 500)
+
+;; Get session cost (accumulated from request log)
+(agent-q:get-session-cost)
+;; => (:TOTAL-COST 0.0123 :INPUT-TOKENS 800 :OUTPUT-TOKENS 400)
+
+;; Budget enforcement
+(agent-q:check-budget "prompt" 0.01)  ; Signals budget-exceeded-error if over $0.01
+
+;; Format cost for display
+(agent-q:format-cost-usd 0.00123)
+;; => "$0.0012"
+```
+
+The chat header line shows accumulated session cost when observability is enabled.
+
 ## Troubleshooting
 
 ### "Authentication failed" error
@@ -351,8 +415,11 @@ agent-q/
 │   ├── context.lisp               # Context accumulation
 │   ├── conversation.lisp          # Message history
 │   ├── prompts.lisp               # System prompts
-│   ├── agent.lisp                 # Core agent loop
+│   ├── agent.lisp                 # Core agent loop with streaming
 │   ├── llm-integration.lisp       # LLM provider integration
+│   ├── streaming.lisp             # Streaming callback infrastructure
+│   ├── observability.lisp         # Logging hooks and metrics
+│   ├── cost.lisp                  # Cost estimation and budgets
 │   ├── session.lisp               # Session persistence (SQLite)
 │   ├── sly-interface.lisp         # SLY RPC endpoints
 │   └── tools/                     # Tool system (Phase 2)
@@ -408,10 +475,13 @@ MIT License - see LICENSE file for details
 **Status**: Phase 1 Complete ✅ | Phase 2 In Progress 🔄 | Phase 3 Partial 🔄
 
 **Recent Additions:**
+- Real-time streaming with incremental token display and header status
+- Observability: logging hooks, metrics collection, request statistics
+- Cost estimation: pre-flight checks, budget enforcement, session tracking
 - @-mention completion for inline context attachment (files, symbols, buffers)
 - Context pills with visual indicators and hover previews
 - Context panel sidebar for managing attached context
 - Comprehensive chat interface with markdown rendering and streaming
 - Session management with SQLite persistence
 - Tool system with introspection, execution, and diff approval
-- Full test suite for Elisp components (155 tests, 150 passing)
+- Full test suite for Elisp components (161 tests, 156 passing)
