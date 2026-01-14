@@ -176,6 +176,11 @@
                                 (when (agent-provider agent)
                                   (cl-llm-provider:provider-default-model (agent-provider agent)))))
 
+                        ;; Debug: check what we got from streaming
+                        (format t "~&[AGENT-Q] DEBUG: final-chunk=~S~%" captured-final-chunk)
+                        (format t "~&[AGENT-Q] DEBUG: final-usage=~S~%" final-usage)
+                        (format t "~&[AGENT-Q] DEBUG: finish-reason=~S~%" final-finish-reason)
+
                         ;; Accumulate token usage
                         (when final-usage
                           (incf total-input-tokens (or (getf final-usage :prompt-tokens) 0))

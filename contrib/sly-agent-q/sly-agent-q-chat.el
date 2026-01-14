@@ -409,14 +409,18 @@ The buffer is divided into two regions:
 
 (defun agent-q--render-system-message (message)
   "Render a system MESSAGE in the output region."
-  (save-excursion
-    (goto-char agent-q--output-end-marker)
-    (let ((inhibit-read-only t)
-          (start (point)))
-      (insert (propertize message 'face 'agent-q-system-message-face))
-      (insert "\n\n")
-      (put-text-property start (point) 'read-only t)
-      (set-marker agent-q--output-end-marker (point)))))
+  (when (and agent-q--output-end-marker
+             (marker-position agent-q--output-end-marker))
+    (save-excursion
+      (goto-char agent-q--output-end-marker)
+      (let ((inhibit-read-only t)
+            (start (point)))
+        (insert (propertize message 'face 'agent-q-system-message-face))
+        (insert "\n\n")
+        (put-text-property start (point) 'read-only t)
+        (set-marker agent-q--output-end-marker (point))))
+    ;; Force display update (may be called from async callbacks)
+    (redisplay t)))
 
 (defun agent-q--display-config-info ()
   "Fetch and display the current provider/model configuration."
