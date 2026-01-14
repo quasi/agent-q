@@ -209,14 +209,19 @@
                            (format t "~&[AGENT-Q] Tool calls detected, executing...~%")
 
                            ;; Make synchronous call to get full tool call data
-                           ;; NOTE: We do NOT accumulate tokens from this sync call because
-                           ;; we already counted them from the streaming request above.
-                           ;; This sync call is only to extract the tool call data structure
-                           ;; which streaming doesn't fully support yet.
                            (let ((response (send-to-llm-with-tools
                                            messages
                                            (agent-system-prompt agent)
                                            :max-safety-level :moderate)))
+
+                             ;; Get usage from sync response if streaming didn't provide it
+                             ;; (Many providers don't include usage in streaming tool call responses)
+                             (when (and (null final-usage)
+                                       (cl-llm-provider:response-usage response))
+                               (let ((sync-usage (cl-llm-provider:response-usage response)))
+                                 (format t "~&[AGENT-Q] DEBUG: Using sync response usage: ~S~%" sync-usage)
+                                 (incf total-input-tokens (or (getf sync-usage :prompt-tokens) 0))
+                                 (incf total-output-tokens (or (getf sync-usage :completion-tokens) 0))))
 
                              (when (cl-llm-provider:response-tool-calls response)
                                (let ((num-tools (length (cl-llm-provider:response-tool-calls response))))

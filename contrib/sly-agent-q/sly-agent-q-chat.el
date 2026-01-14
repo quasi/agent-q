@@ -423,23 +423,27 @@ The buffer is divided into two regions:
     (redisplay t)))
 
 (defun agent-q--display-config-info ()
-  "Fetch and display the current provider/model configuration."
-  (when (sly-connected-p)
-    (sly-eval-async '(agent-q:get-config-info)
-      (lambda (config)
-        (when config
-          (when-let ((buf (get-buffer agent-q-chat-buffer-name)))
-            (with-current-buffer buf
-              (if-let ((error-msg (plist-get config :error)))
-                  ;; Configuration failed - display error
-                  (agent-q--render-system-message
-                   (propertize (format "⚠ Configuration Error: %s" error-msg)
-                               'face '(:foreground "orange")))
-                ;; Configuration succeeded - display provider info
-                (let ((provider-name (or (plist-get config :provider-name) "Unknown"))
-                      (model (or (plist-get config :model) "unknown")))
-                  (agent-q--render-system-message
-                   (format "Using %s %s" provider-name model)))))))))))
+  "Fetch and display the current provider/model configuration.
+Uses a short timer to defer the async call until after mode setup completes."
+  (run-with-timer
+   0.1 nil
+   (lambda ()
+     (when (sly-connected-p)
+       (sly-eval-async '(agent-q:get-config-info)
+         (lambda (config)
+           (when config
+             (when-let ((buf (get-buffer agent-q-chat-buffer-name)))
+               (with-current-buffer buf
+                 (if-let ((error-msg (plist-get config :error)))
+                     ;; Configuration failed - display error
+                     (agent-q--render-system-message
+                      (propertize (format "⚠ Configuration Error: %s" error-msg)
+                                  'face '(:foreground "orange")))
+                   ;; Configuration succeeded - display provider info
+                   (let ((provider-name (or (plist-get config :provider-name) "Unknown"))
+                         (model (or (plist-get config :model) "unknown")))
+                     (agent-q--render-system-message
+                      (format "Using %s %s" provider-name model)))))))))))))
 
 ;;; Input Handling
 
@@ -508,12 +512,26 @@ but allows multi-line input when typing in the middle."
     (agent-q--send-to-agent input)))
 
 (defun agent-q-cancel-request ()
-  "Cancel the current pending request."
+  "Cancel the current pending request.
+Use this (C-c C-k) when the agent appears hung or unresponsive."
   (interactive)
   (if agent-q--pending-response
       (progn
         (setq agent-q--pending-response nil)
-        (setq agent-q--streaming-marker nil)
+        (when agent-q--streaming-marker
+          (set-marker agent-q--streaming-marker nil)
+          (setq agent-q--streaming-marker nil))
+        ;; Insert visual feedback in the buffer
+        (when (and agent-q--output-end-marker
+                   (marker-position agent-q--output-end-marker))
+          (save-excursion
+            (goto-char agent-q--output-end-marker)
+            (let ((inhibit-read-only t))
+              (insert "\n")
+              (insert (propertize "[Request cancelled]" 'face 'warning))
+              (insert "\n\n")
+              (set-marker agent-q--output-end-marker (point)))))
+        (redisplay t)
         (message "Request cancelled"))
     (message "No pending request")))
 
@@ -1036,6 +1054,7 @@ Called from diff and other tool modules."
   (interactive)
   (when (yes-or-no-p "Clear conversation? ")
     (setq agent-q--current-session (agent-q-session--create))
+    (setq agent-q--pending-response nil)  ; Also reset pending state
     (agent-q--setup-buffer-layout)
     (message "Conversation cleared")))
 
