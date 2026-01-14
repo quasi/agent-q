@@ -16,7 +16,12 @@
                  :initform (make-instance 'conversation))
    (system-prompt :initarg :system-prompt
                   :accessor agent-system-prompt
-                  :initform *base-system-prompt*)))
+                  :initform *base-system-prompt*)
+   ;; Streaming support
+   (streaming-callback :initarg :streaming-callback
+                       :accessor agent-streaming-callback
+                       :initform nil
+                       :documentation "Callback for streaming chunks")))
 
 (defvar *current-agent* nil
   "The currently active agent instance")
