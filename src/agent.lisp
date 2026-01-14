@@ -1,4 +1,5 @@
 ;;; -*- Mode: LISP; Syntax: COMMON-LISP; Package: AGENT-Q; Base: 10 -*-
+;;; ABOUTME: Core agent loop with streaming support and tool execution
 
 (in-package :agent-q)
 
@@ -75,9 +76,39 @@
        ,input-tokens
        ,output-tokens))))
 
+(defun finish-reason-is-tool-call-p (finish-reason)
+  "Check if FINISH-REASON indicates tool calls were requested.
+   Handles both :TOOL_CALLS (from API) and :TOOL-CALLS (normalized) variants."
+  (when finish-reason
+    (let ((name (symbol-name finish-reason)))
+      (or (string-equal name "TOOL_CALLS")
+          (string-equal name "TOOL-CALLS")
+          ;; Anthropic uses :TOOL_USE
+          (string-equal name "TOOL_USE")))))
+
+(defun finish-reason-is-stop-p (finish-reason)
+  "Check if FINISH-REASON indicates natural completion.
+   Handles :STOP, :END_TURN (Anthropic), etc."
+  (when finish-reason
+    (let ((name (symbol-name finish-reason)))
+      (or (string-equal name "STOP")
+          (string-equal name "END_TURN")
+          (string-equal name "END-TURN")))))
+
 (defmethod send-to-agent ((agent agent) user-message &key include-context)
-  "Send message to agent with tool execution loop.
-   This implements the agentic loop: LLM responds → execute tools → send results back → repeat until done."
+  "Send message to agent with streaming support and tool execution loop.
+   This implements the agentic loop: LLM responds → execute tools → send results back → repeat until done.
+   Text responses are streamed to Emacs incrementally for better UX.
+
+   Streaming integration:
+   - When callbacks are passed to send-to-llm-streaming, cl-llm-provider reads all chunks
+     internally and calls the callbacks. After completion, the stream object contains
+     the accumulated content and final chunk data.
+   - The on-chunk callback sends text deltas to Emacs for incremental display.
+   - The on-complete callback captures the final chunk for finish reason and usage.
+   - After streaming completes, we check the finish reason to decide next steps.
+   - For tool calls, we fall back to synchronous request to get full tool call data
+     (streaming API doesn't fully support tool call extraction yet)."
   (let* ((conversation (agent-conversation agent))
          ;; Build full message with context if requested
          (context-string (when include-context
@@ -99,6 +130,9 @@
     ;; Add user message to history
     (add-message conversation :user full-message)
 
+    ;; Notify Emacs that streaming is starting
+    (agent-q.tools:eval-in-emacs '(agent-q--start-streaming))
+
     ;; Build initial messages list
     (let ((messages (build-messages-for-llm conversation)))
 
@@ -108,121 +142,181 @@
                 for iteration from 1 to max-iterations
                 do
                 (progn
-                  (format t "~&[AGENT-Q] Iteration ~D~%" iteration)
+                  (format t "~&[AGENT-Q] Iteration ~D (streaming)~%" iteration)
 
-                  ;; Call LLM with tools
-                  (let ((response (send-to-llm-with-tools
-                                  messages
-                                  (agent-system-prompt agent)
-                                  :max-safety-level :moderate)))
+                  ;; Variables to capture streaming results via callbacks
+                  (let ((captured-final-chunk nil))
 
-                    ;; Capture actual model from response and accumulate token usage
-                    (setf actual-model (cl-llm-provider:response-model response))
-                    (let ((usage (cl-llm-provider:response-usage response)))
-                      (when usage
-                        (incf total-input-tokens (or (getf usage :prompt-tokens) 0))
-                        (incf total-output-tokens (or (getf usage :completion-tokens) 0))))
+                    ;; Use streaming for the LLM request
+                    ;; When callbacks are provided, complete-stream reads all chunks internally
+                    ;; and calls our callbacks. After it returns, stream contains accumulated data.
+                    (let ((stream (send-to-llm-streaming
+                                   messages
+                                   (agent-system-prompt agent)
+                                   :max-safety-level :moderate
+                                   :on-chunk (make-emacs-streaming-callback)
+                                   :on-complete (lambda (full-content final-chunk)
+                                                 (declare (ignore full-content))
+                                                 ;; Capture the final chunk for finish reason and usage
+                                                 (setf captured-final-chunk final-chunk))
+                                   :on-error (make-emacs-error-callback))))
 
-                    (cond
-                      ;; Case 1: Text response with no tool calls - we're done
-                      ((and (cl-llm-provider:response-content response)
-                            (null (cl-llm-provider:response-tool-calls response)))
-                       (let ((content (cl-llm-provider:response-content response)))
-                         (format t "~&[AGENT-Q] Agent completed (text response)~%")
-                         ;; Add assistant response to conversation history
-                         (add-message conversation :assistant content)
-                         ;; Report token usage to Emacs with actual model/provider
-                         (report-session-info-to-emacs
-                          actual-model actual-provider
-                          total-input-tokens total-output-tokens)
-                         (return content)))
+                      ;; At this point, streaming is complete (callbacks already fired)
+                      ;; Extract results from the stream object and captured final chunk
+                      (let* ((accumulated-content (cl-llm-provider:stream-accumulated-content stream))
+                             (final-finish-reason (when captured-final-chunk
+                                                   (cl-llm-provider:chunk-finish-reason captured-final-chunk)))
+                             (final-usage (when captured-final-chunk
+                                           (cl-llm-provider:chunk-usage captured-final-chunk))))
 
-                      ;; Case 2: Tool calls - execute and continue loop
-                      ((cl-llm-provider:response-tool-calls response)
-                       (let ((num-tools (length (cl-llm-provider:response-tool-calls response))))
-                         (format t "~&[AGENT-Q] Executing ~D tool call~:P~%" num-tools)
+                        ;; Update model info from provider (stream-model not exported)
+                        ;; Get model from provider's default-model since streaming doesn't expose it
+                        (unless actual-model
+                          (setf actual-model
+                                (when (agent-provider agent)
+                                  (cl-llm-provider:provider-default-model (agent-provider agent)))))
 
-                         ;; Verbose: Log which tools are being called
-                         (when *verbose-mode*
-                           (let* ((tool-names (mapcar (lambda (tc)
-                                                        (cl-llm-provider:tool-call-name tc))
-                                                     (cl-llm-provider:response-tool-calls response)))
-                                  (msg (format nil "⚙ Calling tools: ~{~A~^, ~}" tool-names)))
-                             (add-message conversation :debug msg)
-                             ;; Send to Emacs immediately
+                        ;; Accumulate token usage
+                        (when final-usage
+                          (incf total-input-tokens (or (getf final-usage :prompt-tokens) 0))
+                          (incf total-output-tokens (or (getf final-usage :completion-tokens) 0)))
+
+                        ;; Check finish reason to determine next action
+                        (cond
+                          ;; Case 1: Natural completion - we're done
+                          ((finish-reason-is-stop-p final-finish-reason)
+                           (format t "~&[AGENT-Q] Agent completed (streaming)~%")
+                           ;; Finalize streaming in Emacs
+                           (agent-q.tools:eval-in-emacs
+                            `(agent-q--finalize-response ,accumulated-content))
+                           ;; Add assistant response to conversation history
+                           (add-message conversation :assistant accumulated-content)
+                           ;; Report session info to Emacs
+                           (report-session-info-to-emacs
+                            actual-model actual-provider
+                            total-input-tokens total-output-tokens)
+                           (return accumulated-content))
+
+                          ;; Case 2: Tool calls requested
+                          ;; Note: Streaming doesn't fully support tool call data extraction yet,
+                          ;; so we make a synchronous call to get the tool calls
+                          ((finish-reason-is-tool-call-p final-finish-reason)
+                           (format t "~&[AGENT-Q] Tool calls detected, executing...~%")
+
+                           ;; Make synchronous call to get full tool call data
+                           (let ((response (send-to-llm-with-tools
+                                           messages
+                                           (agent-system-prompt agent)
+                                           :max-safety-level :moderate)))
+
+                             ;; Accumulate token usage from sync call too
+                             (let ((usage (cl-llm-provider:response-usage response)))
+                               (when usage
+                                 (incf total-input-tokens (or (getf usage :prompt-tokens) 0))
+                                 (incf total-output-tokens (or (getf usage :completion-tokens) 0))))
+
+                             (when (cl-llm-provider:response-tool-calls response)
+                               (let ((num-tools (length (cl-llm-provider:response-tool-calls response))))
+                                 (format t "~&[AGENT-Q] Executing ~D tool call~:P~%" num-tools)
+
+                                 ;; Verbose: Log which tools are being called
+                                 (when *verbose-mode*
+                                   (let* ((tool-names (mapcar (lambda (tc)
+                                                               (cl-llm-provider:tool-call-name tc))
+                                                             (cl-llm-provider:response-tool-calls response)))
+                                          (msg (format nil "⚙ Calling tools: ~{~A~^, ~}" tool-names)))
+                                     (add-message conversation :debug msg)
+                                     (agent-q.tools:eval-in-emacs
+                                      `(sly-agent-q--append-to-conversation 'debug ,msg))))
+
+                                 ;; Execute tools
+                                 (let* ((exec-results (execute-tool-calls-safe response))
+                                        (tool-msgs (tool-results-to-messages exec-results))
+                                        (assistant-msg (cl-llm-provider:response-message response)))
+
+                                   ;; Verbose: Log tool results
+                                   (when *verbose-mode*
+                                     (dolist (result exec-results)
+                                       (let* ((tool-call (car result))
+                                              (tool-result (cdr result))
+                                              (tool-name (cl-llm-provider:tool-call-name tool-call))
+                                              (result-str (etypecase tool-result
+                                                            (string tool-result)
+                                                            (condition (format nil "ERROR: ~A" tool-result))
+                                                            (t (format nil "~S" tool-result))))
+                                              (truncated (if (> (length result-str) 200)
+                                                            (format nil "~A... [truncated, ~D chars total]"
+                                                                   (subseq result-str 0 200)
+                                                                   (length result-str))
+                                                            result-str))
+                                              (msg (format nil "  → ~A: ~A" tool-name truncated)))
+                                         (add-message conversation :debug msg)
+                                         (agent-q.tools:eval-in-emacs
+                                          `(sly-agent-q--append-to-conversation 'debug ,msg)))))
+
+                                   ;; Add assistant message text to conversation history
+                                   (add-message conversation :assistant
+                                               (or (getf assistant-msg :content) ""))
+
+                                   ;; Append assistant message (WITH tool_calls) and tool results to messages
+                                   (setf messages (append messages
+                                                         (list assistant-msg)
+                                                         tool-msgs)))))))
+
+                          ;; Case 3: No finish reason or streaming completed without explicit stop
+                          ;; This can happen if the model just stopped (treat as completion)
+                          ((and (> (length accumulated-content) 0)
+                                (null final-finish-reason))
+                           (format t "~&[AGENT-Q] Stream ended (no explicit finish reason)~%")
+                           (agent-q.tools:eval-in-emacs
+                            `(agent-q--finalize-response ,accumulated-content))
+                           (add-message conversation :assistant accumulated-content)
+                           (report-session-info-to-emacs
+                            actual-model actual-provider
+                            total-input-tokens total-output-tokens)
+                           (return accumulated-content))
+
+                          ;; Case 4: Unexpected state
+                          (t
+                           (let ((err-msg (format nil "Unexpected finish reason: ~A" final-finish-reason)))
+                             (format t "~&[AGENT-Q ERROR] ~A~%" err-msg)
                              (agent-q.tools:eval-in-emacs
-                              `(sly-agent-q--append-to-conversation 'debug ,msg)))))
-
-                       ;; Execute tools
-                       (let* ((exec-results (execute-tool-calls-safe response))
-                              (tool-msgs (tool-results-to-messages exec-results))
-                              (assistant-msg (cl-llm-provider:response-message response)))
-
-                         ;; Verbose: Log tool results
-                         (when *verbose-mode*
-                           (dolist (result exec-results)
-                             (let* ((tool-call (car result))
-                                    (tool-result (cdr result))
-                                    (tool-name (cl-llm-provider:tool-call-name tool-call))
-                                    (result-str (etypecase tool-result
-                                                  (string tool-result)
-                                                  (condition (format nil "ERROR: ~A" tool-result))
-                                                  (t (format nil "~S" tool-result))))
-                                    ;; Truncate long results
-                                    (truncated (if (> (length result-str) 200)
-                                                  (format nil "~A... [truncated, ~D chars total]"
-                                                         (subseq result-str 0 200)
-                                                         (length result-str))
-                                                  result-str))
-                                    (msg (format nil "  → ~A: ~A" tool-name truncated)))
-                               (add-message conversation :debug msg)
-                               ;; Send to Emacs immediately
-                               (agent-q.tools:eval-in-emacs
-                                `(sly-agent-q--append-to-conversation 'debug ,msg)))))
-
-                         ;; Add assistant message text to conversation history
-                         ;; (We save text for display, but keep full message with tool_calls for LLM)
-                         (add-message conversation :assistant
-                                     (or (getf assistant-msg :content) ""))
-
-                         ;; Append assistant message (WITH tool_calls) and tool results to messages
-                         ;; This is critical: the assistant message must include tool_calls so that
-                         ;; the tool result messages can reference them via tool_call_id
-                         (setf messages (append messages
-                                               (list assistant-msg)
-                                               tool-msgs))))
-
-                      ;; Case 3: Unexpected response format
-                      (t
-                       (let ((err-msg "Unexpected response format from LLM"))
-                         (format t "~&[AGENT-Q ERROR] ~A~%" err-msg)
-                         ;; Report token usage even on error with actual model/provider
-                         (report-session-info-to-emacs
-                          actual-model actual-provider
-                          total-input-tokens total-output-tokens)
-                         (return err-msg))))))
+                              `(agent-q--streaming-error ,err-msg))
+                             (report-session-info-to-emacs
+                              actual-model actual-provider
+                              total-input-tokens total-output-tokens)
+                             (return err-msg))))))))  ; close cond, let*, let(stream), let(captured), progn
 
                 finally
                 ;; Max iterations reached
                 (let ((msg "Maximum iterations reached. The agent may be stuck in a loop."))
                   (format t "~&[AGENT-Q WARNING] ~A~%" msg)
-                  ;; Report token usage even on max iterations with actual model/provider
+                  (agent-q.tools:eval-in-emacs
+                   `(agent-q--streaming-error ,msg))
                   (report-session-info-to-emacs
                    actual-model actual-provider
                    total-input-tokens total-output-tokens)
-                  (return msg)))
+                  (return msg)))  ; close let(msg), finally clause, loop
 
         ;; Error handling
         (cl-llm-provider:provider-authentication-error (e)
+          (agent-q.tools:eval-in-emacs
+           `(agent-q--streaming-error ,(format nil "Authentication failed: ~A" e)))
           (format nil "Authentication failed: ~A. Check your API key." e))
 
         (cl-llm-provider:provider-rate-limit-error ()
+          (agent-q.tools:eval-in-emacs
+           '(agent-q--streaming-error "Rate limited. Please try again later."))
           (format nil "Rate limited. Please try again later."))
 
         (cl-llm-provider:provider-api-error (e)
+          (agent-q.tools:eval-in-emacs
+           `(agent-q--streaming-error ,(format nil "API error: ~A" e)))
           (format nil "API error: ~A" e))
 
         (error (e)
+          (agent-q.tools:eval-in-emacs
+           `(agent-q--streaming-error ,(format nil "Error: ~A" e)))
           (format nil "Unexpected error: ~A~%~%Backtrace: ~A"
                  e (agent-q.tools:capture-backtrace-portable)))))))
 

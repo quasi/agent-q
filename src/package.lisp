@@ -90,6 +90,7 @@
 
    ;; LLM Integration (Phase 2)
    #:send-to-llm-with-tools
+   #:send-to-llm-streaming
    #:execute-tool-calls-safe
    #:tool-results-to-messages
    #:build-messages-for-llm
