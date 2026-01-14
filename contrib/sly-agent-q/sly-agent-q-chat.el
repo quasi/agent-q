@@ -146,6 +146,22 @@ for visual clarity."
 (defvar-local agent-q--streaming-marker nil
   "Marker where streaming chunks are appended.")
 
+;; Session info for header line display
+(defvar-local agent-q--session-model nil
+  "Current model name for header line display.")
+
+(defvar-local agent-q--session-provider nil
+  "Current provider name for header line display.")
+
+(defvar-local agent-q--session-input-tokens nil
+  "Total input tokens for header line display.")
+
+(defvar-local agent-q--session-output-tokens nil
+  "Total output tokens for header line display.")
+
+(defvar-local agent-q--session-cost nil
+  "Session cost in USD for header line display.")
+
 ;; Forward declaration - defined in sly-agent-q.el which loads after us
 ;; This allows the insert-last-response command to work with chat responses
 (defvar sly-agent-q--last-response nil
@@ -901,9 +917,10 @@ Called via `slynk:eval-in-emacs' for tool execution feedback."
       (agent-q--append-response-chunk
        (propertize (format "[%s]\n" msg) 'face 'agent-q-debug-face)))))
 
-(defun agent-q-chat-set-session-info (model provider input-tokens output-tokens)
-  "Update current session with MODEL, PROVIDER, and token counts.
-Called from Lisp side via `slynk:eval-in-emacs' after receiving LLM response."
+(defun agent-q-chat-set-session-info (model provider input-tokens output-tokens &optional cost)
+  "Update current session with MODEL, PROVIDER, token counts, and COST.
+Called from Lisp side via `slynk:eval-in-emacs' after receiving LLM response.
+COST is optional and should be the session cost in USD."
   (when-let ((buf (get-buffer agent-q-chat-buffer-name)))
     (with-current-buffer buf
       (when agent-q--current-session
@@ -916,7 +933,34 @@ Called from Lisp side via `slynk:eval-in-emacs' after receiving LLM response."
         ;; Accumulate token usage
         (when (and input-tokens output-tokens)
           (agent-q-session-add-tokens agent-q--current-session
-                                      input-tokens output-tokens))))))
+                                      input-tokens output-tokens)))
+      ;; Update buffer-local variables for header line
+      (setq agent-q--session-model model)
+      (setq agent-q--session-provider provider)
+      (setq agent-q--session-input-tokens
+            (+ (or agent-q--session-input-tokens 0)
+               (or input-tokens 0)))
+      (setq agent-q--session-output-tokens
+            (+ (or agent-q--session-output-tokens 0)
+               (or output-tokens 0)))
+      (when cost
+        (setq agent-q--session-cost
+              (+ (or agent-q--session-cost 0) cost)))
+      ;; Update header line display
+      (agent-q--update-header-line))))
+
+(defun agent-q--update-header-line ()
+  "Update the header line with session info."
+  (when (eq major-mode 'agent-q-chat-mode)
+    (setq header-line-format
+          (format " Agent-Q | %s (%s) | Tokens: %d/%d%s"
+                  (or agent-q--session-model "?")
+                  (or agent-q--session-provider "?")
+                  (or agent-q--session-input-tokens 0)
+                  (or agent-q--session-output-tokens 0)
+                  (if agent-q--session-cost
+                      (format " | Cost: $%.4f" agent-q--session-cost)
+                    "")))))
 
 (defun agent-q--insert-tool-message (msg)
   "Insert tool MSG into the output region.
