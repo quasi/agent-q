@@ -28,6 +28,7 @@
                             (:file "llm-integration")
                             (:file "streaming")
                             (:file "observability")
+                            (:file "cost")
                             (:file "agent")
                             (:file "sly-interface"))))
 

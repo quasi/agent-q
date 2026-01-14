@@ -114,6 +114,16 @@
    #:format-stats
    #:get-observability-info
 
+   ;; Cost estimation
+   #:estimate-request-cost
+   #:format-cost-usd
+   #:check-budget
+   #:get-session-cost
+   #:format-session-cost
+   #:budget-exceeded-error
+   #:error-estimated-cost
+   #:error-budget
+
    ;; SLY interface
    #:agent-q-send
    #:agent-q-add-context
