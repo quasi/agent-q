@@ -38,6 +38,11 @@
   API-KEY - API key (optional, reads from env var if not provided)
   BASE-URL - Base URL for provider (optional, for Ollama/custom endpoints)
 
+  Performs capability checking after creation:
+  - Warns if provider doesn't support tool calling
+  - Warns if provider doesn't support streaming
+  - Logs available capabilities in verbose mode
+
   Returns T on success, signals error on failure."
   ;; Update defaults
   (when provider (setf *default-provider* provider))
@@ -50,6 +55,27 @@
          :model *default-model*
          :api-key api-key
          :base-url base-url))
+
+  ;; Check required capabilities
+  (unless (cl-llm-provider:provider-supports-p *provider-instance* :tools)
+    (warn "Provider ~A may not support tool calling. ~
+           Agent-Q tool execution may not work correctly."
+          (cl-llm-provider:provider-name *provider-instance*)))
+
+  ;; Check streaming support
+  (unless (cl-llm-provider:provider-supports-p *provider-instance* :streaming)
+    (warn "Provider ~A may not support streaming. ~
+           Responses will appear all at once instead of incrementally."
+          (cl-llm-provider:provider-name *provider-instance*)))
+
+  ;; Log configuration in verbose mode
+  (when *verbose-mode*
+    (format t "~&[AGENT-Q] Configured: ~A (~A)~%"
+            (cl-llm-provider:provider-name *provider-instance*)
+            *default-model*)
+    (format t "~&[AGENT-Q] Capabilities: ~S~%"
+            (cl-llm-provider:provider-capabilities *provider-instance*)))
+
   t)
 
 (defun sync-from-cl-llm-provider ()

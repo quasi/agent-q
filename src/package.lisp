@@ -83,6 +83,10 @@
    #:send-to-agent
    #:get-last-response
 
+   ;; Context window awareness
+   #:get-context-limit
+   #:check-context-limit
+
    ;; Prompts
    #:*base-system-prompt*
    #:load-project-prompt

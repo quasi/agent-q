@@ -329,6 +329,103 @@
       (when assistant-msgs
         (message-content (car (last assistant-msgs)))))))
 
+;;;; Context Window Awareness
+;;;;
+;;;; Functions to check model context limits and warn when approaching capacity.
+;;;; Uses cl-llm-provider metadata API for model-specific limits.
+
+(defun get-context-limit ()
+  "Get context window size for current model.
+
+   Uses cl-llm-provider:model-metadata to retrieve the :context-window
+   property for the configured model. Falls back to conservative defaults
+   based on provider type if metadata is unavailable.
+
+   Returns token limit as integer.
+
+   Example:
+     (get-context-limit) => 200000  ; for Claude models
+
+   Default fallbacks by provider:
+     :anthropic   -> 200000
+     :openai      -> 128000
+     :ollama      -> 8192
+     :openrouter  -> 128000
+     other        -> 8192"
+  (if *provider-instance*
+      (let* ((model (cl-llm-provider:provider-default-model *provider-instance*))
+             (meta (cl-llm-provider:model-metadata *provider-instance* model)))
+        (if meta
+            (or (getf meta :context-window)
+                ;; Metadata exists but no context-window field
+                (get-context-limit-fallback *provider-instance*))
+            ;; No metadata available, use fallback
+            (get-context-limit-fallback *provider-instance*)))
+      ;; No provider configured, use conservative default
+      8192))
+
+(defun get-context-limit-fallback (provider)
+  "Return conservative context window default based on provider type.
+
+   PROVIDER - cl-llm-provider instance
+
+   Returns integer token limit."
+  (case (cl-llm-provider:provider-type provider)
+    (:anthropic 200000)    ; Claude 3.x models
+    (:openai 128000)       ; GPT-4 Turbo
+    (:ollama 8192)         ; Varies by model, use conservative
+    (:openrouter 128000)   ; Pass-through, assume modern model
+    (otherwise 8192)))
+
+(defun check-context-limit (messages &key (threshold 0.8) (system-prompt nil))
+  "Check if messages fit within model's context window.
+
+   MESSAGES - List of message plists (:role :content)
+   THRESHOLD - Warning threshold as fraction of limit (default 0.8 = 80%)
+   SYSTEM-PROMPT - Optional system prompt to include in token count
+
+   Uses cl-llm-provider:count-tokens to estimate total tokens.
+   Signals a warning if approaching limit (above threshold).
+
+   Returns plist with:
+     :tokens       - Estimated token count
+     :limit        - Context window limit
+     :usage        - Usage as percentage (0-100)
+     :warning      - T if above threshold, NIL otherwise
+
+   Example:
+     (let ((result (check-context-limit messages)))
+       (when (getf result :warning)
+         (format t \"Warning: ~D% of context used~%\"
+                 (getf result :usage))))"
+  (let* ((limit (get-context-limit))
+         ;; Estimate tokens using cl-llm-provider
+         (estimated-tokens (if system-prompt
+                               (cl-llm-provider:count-tokens-with-system
+                                messages system-prompt)
+                               (cl-llm-provider:count-tokens messages)))
+         (threshold-tokens (* limit threshold))
+         (usage-pct (if (> limit 0)
+                       (round (* 100.0 (/ estimated-tokens limit)))
+                       0))
+         (warning-p (> estimated-tokens threshold-tokens)))
+
+    ;; Emit warning if above threshold
+    (when warning-p
+      (warn "Messages (~:D tokens) approaching context limit (~:D). ~
+             Using ~D% of available context."
+            estimated-tokens limit usage-pct))
+
+    ;; Verbose logging
+    (when (and *verbose-mode* (not warning-p))
+      (format t "~&[AGENT-Q] Context usage: ~:D/~:D tokens (~D%)~%"
+              estimated-tokens limit usage-pct))
+
+    (list :tokens estimated-tokens
+          :limit limit
+          :usage usage-pct
+          :warning warning-p)))
+
 ;;; Initialize default agent if needed
 
 (defun ensure-agent ()
