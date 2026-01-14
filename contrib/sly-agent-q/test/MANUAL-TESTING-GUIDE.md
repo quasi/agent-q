@@ -103,15 +103,30 @@ M-x agent-q-chat RET
 
 **Steps:**
 1. Note your current session name in header (or name it via `C-c q n`)
-2. Send a few messages
-3. Kill the chat buffer: `C-x k`
-4. Reopen: `M-x agent-q-chat`
-5. Load previous session: `C-c q l` and select it
+2. Send a few messages (e.g., "Hello", wait for reply, then "What is 2+2?")
+3. In REPL, save the session: `(agent-q:save-session (agent-q:current-session agent-q:*session-manager*))`
+4. Check the saved file: `ls -la ~/.emacs.d/agent-q-sessions/`
+5. Open the session file and verify messages are present (not `:messages nil`)
+6. Kill the chat buffer: `C-x k`
+7. Restart Lisp image (or just `(setf agent-q:*session-manager* nil)` to clear state)
+8. Reopen: `M-x agent-q-chat`
+9. Load previous session: `C-c q l` and select it
 
 **Expected:**
-- Previous messages restored
+- Session file contains `:messages ((...) (...))` with actual content
+- Previous messages restored in chat buffer
 - Token counts restored
 - Can continue conversation
+
+**Verify in session file:**
+```lisp
+;; Should see something like:
+(:messages ((:role :user :content "Hello" :timestamp 12345)
+            (:role :assistant :content "Hi there!" :timestamp 12346)
+            ...))
+```
+
+**If messages are nil:** The agent-session conversation link is broken.
 
 ---
 
