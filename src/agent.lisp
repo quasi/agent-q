@@ -109,7 +109,12 @@
    - After streaming completes, we check the finish reason to decide next steps.
    - For tool calls, we fall back to synchronous request to get full tool call data
      (streaming API doesn't fully support tool call extraction yet)."
-  (let* ((conversation (agent-conversation agent))
+  ;; Use session's conversation if available, so messages persist with the session.
+  ;; Fall back to agent's own conversation if no session is active.
+  (let* ((conversation (or (and *session-manager*
+                                (current-session *session-manager*)
+                                (session-conversation (current-session *session-manager*)))
+                           (agent-conversation agent)))
          ;; Build full message with context if requested
          (context-string (when include-context
                           (context-to-string
