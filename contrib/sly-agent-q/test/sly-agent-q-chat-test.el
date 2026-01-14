@@ -365,5 +365,135 @@
       (agent-q--insert-message-separator)
       (should (= start (point))))))
 
+;;;; Streaming Callback Tests (Task 10)
+
+(ert-deftest agent-q-chat/streaming/start ()
+  "Test streaming start handler `agent-q--start-streaming'.
+This function is called from Common Lisp when streaming begins."
+  ;; Create a temp buffer with the expected name so agent-q--start-streaming finds it
+  (let ((agent-q-chat-buffer-name "*Test-Agent-Q-Chat*"))
+    (with-current-buffer (get-buffer-create agent-q-chat-buffer-name)
+      (unwind-protect
+          (progn
+            (agent-q-chat-mode)
+            ;; Reset streaming state
+            (setq agent-q--streaming-marker nil)
+            (setq agent-q--pending-response nil)
+            ;; Call the streaming start handler
+            (agent-q--start-streaming)
+            ;; Verify streaming marker is created
+            (should (markerp agent-q--streaming-marker))
+            ;; Verify pending-response is set
+            (should agent-q--pending-response)
+            ;; Verify assistant header is inserted
+            (goto-char (point-min))
+            (should (search-forward "[AGENT-Q]" nil t)))
+        ;; Cleanup
+        (kill-buffer)))))
+
+(ert-deftest agent-q-chat/streaming/append-chunk-integration ()
+  "Test streaming chunk appending via `agent-q--start-streaming' and `agent-q--append-response-chunk'.
+Verifies that chunks are properly accumulated in the buffer."
+  (let ((agent-q-chat-buffer-name "*Test-Agent-Q-Chat*"))
+    (with-current-buffer (get-buffer-create agent-q-chat-buffer-name)
+      (unwind-protect
+          (progn
+            (agent-q-chat-mode)
+            ;; Start streaming
+            (agent-q--start-streaming)
+            ;; Append some chunks
+            (agent-q--append-response-chunk "Hello ")
+            (agent-q--append-response-chunk "streaming ")
+            (agent-q--append-response-chunk "world!")
+            ;; Verify buffer contains all chunks
+            (should (string-match-p "Hello streaming world!" (buffer-string))))
+        ;; Cleanup
+        (kill-buffer)))))
+
+(ert-deftest agent-q-chat/streaming/error ()
+  "Test streaming error handler `agent-q--streaming-error'.
+Verifies that errors are displayed and streaming state is cleaned up."
+  (let ((agent-q-chat-buffer-name "*Test-Agent-Q-Chat*"))
+    (with-current-buffer (get-buffer-create agent-q-chat-buffer-name)
+      (unwind-protect
+          (progn
+            (agent-q-chat-mode)
+            ;; Start streaming first
+            (agent-q--start-streaming)
+            ;; Verify streaming is active
+            (should agent-q--pending-response)
+            (should (markerp agent-q--streaming-marker))
+            ;; Trigger error
+            (agent-q--streaming-error "Test connection error")
+            ;; Verify error is displayed in buffer
+            (should (string-match-p "\\[Error: Test connection error\\]"
+                                    (buffer-string)))
+            ;; Verify streaming state is cleaned up
+            (should-not agent-q--pending-response)
+            (should-not agent-q--streaming-marker))
+        ;; Cleanup
+        (kill-buffer)))))
+
+(ert-deftest agent-q-chat/header/cost-display ()
+  "Test cost display in header line via `agent-q-chat-set-session-info'.
+Verifies that cost is formatted correctly in the header."
+  (let ((agent-q-chat-buffer-name "*Test-Agent-Q-Chat*"))
+    (with-current-buffer (get-buffer-create agent-q-chat-buffer-name)
+      (unwind-protect
+          (progn
+            (agent-q-chat-mode)
+            ;; Set session info with cost
+            (agent-q-chat-set-session-info "claude-sonnet-4" "anthropic" 100 50 0.0025)
+            ;; Verify buffer-local variables are set
+            (should (string= "claude-sonnet-4" agent-q--session-model))
+            (should (string= "anthropic" agent-q--session-provider))
+            (should (= 100 agent-q--session-input-tokens))
+            (should (= 50 agent-q--session-output-tokens))
+            (should (= 0.0025 agent-q--session-cost))
+            ;; Verify header line format includes cost
+            (should (stringp header-line-format))
+            (should (string-match-p "Cost: \\$0\\.0025" header-line-format))
+            (should (string-match-p "claude-sonnet-4" header-line-format))
+            (should (string-match-p "anthropic" header-line-format))
+            (should (string-match-p "100/50" header-line-format)))
+        ;; Cleanup
+        (kill-buffer)))))
+
+(ert-deftest agent-q-chat/header/cost-accumulation ()
+  "Test that cost accumulates across multiple calls to `agent-q-chat-set-session-info'."
+  (let ((agent-q-chat-buffer-name "*Test-Agent-Q-Chat*"))
+    (with-current-buffer (get-buffer-create agent-q-chat-buffer-name)
+      (unwind-protect
+          (progn
+            (agent-q-chat-mode)
+            ;; First call
+            (agent-q-chat-set-session-info "claude-sonnet-4" "anthropic" 100 50 0.001)
+            ;; Second call - tokens and cost should accumulate
+            (agent-q-chat-set-session-info "claude-sonnet-4" "anthropic" 200 100 0.002)
+            ;; Verify accumulation
+            (should (= 300 agent-q--session-input-tokens))
+            (should (= 150 agent-q--session-output-tokens))
+            (should (= 0.003 agent-q--session-cost)))
+        ;; Cleanup
+        (kill-buffer)))))
+
+(ert-deftest agent-q-chat/header/no-cost-display ()
+  "Test header line without cost when cost is not provided."
+  (let ((agent-q-chat-buffer-name "*Test-Agent-Q-Chat*"))
+    (with-current-buffer (get-buffer-create agent-q-chat-buffer-name)
+      (unwind-protect
+          (progn
+            (agent-q-chat-mode)
+            ;; Set session info without cost
+            (agent-q-chat-set-session-info "gpt-4" "openai" 50 25 nil)
+            ;; Verify header line does NOT include "Cost:"
+            (should (stringp header-line-format))
+            (should-not (string-match-p "Cost:" header-line-format))
+            ;; But should still show other info
+            (should (string-match-p "gpt-4" header-line-format))
+            (should (string-match-p "openai" header-line-format)))
+        ;; Cleanup
+        (kill-buffer)))))
+
 (provide 'sly-agent-q-chat-test)
 ;;; sly-agent-q-chat-test.el ends here
