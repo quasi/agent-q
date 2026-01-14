@@ -353,13 +353,12 @@
      :openrouter  -> 128000
      other        -> 8192"
   (if *provider-instance*
-      (let* ((model (cl-llm-provider:provider-default-model *provider-instance*))
-             (meta (cl-llm-provider:model-metadata *provider-instance* model)))
-        (if meta
-            (or (getf meta :context-window)
-                ;; Metadata exists but no context-window field
-                (get-context-limit-fallback *provider-instance*))
-            ;; No metadata available, use fallback
+      (let* ((model (cl-llm-provider:provider-default-model *provider-instance*)))
+        (if model
+            (let ((meta (cl-llm-provider:model-metadata *provider-instance* model)))
+              (if (and meta (getf meta :context-window))
+                  (getf meta :context-window)
+                  (get-context-limit-fallback *provider-instance*)))
             (get-context-limit-fallback *provider-instance*)))
       ;; No provider configured, use conservative default
       8192))
