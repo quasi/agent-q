@@ -811,6 +811,67 @@ Unlike streaming, this renders the complete message at once."
       (put-text-property start (point) 'read-only t)
       (set-marker agent-q--output-end-marker (point)))))
 
+;;; Streaming Callbacks (called from CL via eval-in-emacs)
+
+(defun agent-q--start-streaming ()
+  "Called when streaming response begins.
+Prepares the chat buffer for incremental text.
+This function is called from Common Lisp via `slynk:eval-in-emacs'."
+  (when-let ((buf (get-buffer agent-q-chat-buffer-name)))
+    (with-current-buffer buf
+      ;; Initialize streaming state
+      (setq agent-q--pending-response t)
+      ;; Insert assistant header at output end
+      (save-excursion
+        (goto-char agent-q--output-end-marker)
+        (let ((inhibit-read-only t))
+          (insert (propertize "[AGENT-Q]" 'face 'agent-q-assistant-header-face))
+          (insert " ")
+          (insert (propertize (format-time-string "%H:%M:%S")
+                              'face 'agent-q-timestamp-face))
+          (insert "\n")
+          ;; Set streaming marker for chunk insertion
+          (setq agent-q--streaming-marker (point-marker))
+          (set-marker-insertion-type agent-q--streaming-marker t)
+          (set-marker agent-q--output-end-marker (point))))
+      ;; Force immediate display update
+      (redisplay t))))
+
+(defun agent-q--update-token-usage (prompt-tokens completion-tokens)
+  "Called with token counts from streaming response.
+PROMPT-TOKENS is the number of input tokens.
+COMPLETION-TOKENS is the number of output tokens.
+This function is called from Common Lisp via `slynk:eval-in-emacs'."
+  (when-let ((buf (get-buffer agent-q-chat-buffer-name)))
+    (with-current-buffer buf
+      (when agent-q--current-session
+        ;; Accumulate token usage in session
+        (when (and prompt-tokens completion-tokens)
+          (agent-q-session-add-tokens agent-q--current-session
+                                      prompt-tokens completion-tokens))))))
+
+(defun agent-q--streaming-error (error-message)
+  "Called when streaming encounters an error.
+ERROR-MESSAGE is the error description string.
+This function is called from Common Lisp via `slynk:eval-in-emacs'."
+  (when-let ((buf (get-buffer agent-q-chat-buffer-name)))
+    (with-current-buffer buf
+      (save-excursion
+        (goto-char (or agent-q--streaming-marker agent-q--output-end-marker))
+        (let ((inhibit-read-only t))
+          (insert "\n")
+          (insert (propertize (format "[Error: %s]" error-message)
+                              'face 'error))
+          (insert "\n\n")
+          (set-marker agent-q--output-end-marker (point))))
+      ;; Clean up streaming state
+      (setq agent-q--pending-response nil)
+      (when agent-q--streaming-marker
+        (set-marker agent-q--streaming-marker nil)
+        (setq agent-q--streaming-marker nil))
+      ;; Force display update
+      (redisplay t))))
+
 ;;; SLY Integration
 
 (defun agent-q--send-to-agent (content)
