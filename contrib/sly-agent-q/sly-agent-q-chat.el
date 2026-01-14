@@ -621,41 +621,45 @@ response into other buffers with `sly-agent-q-insert-last-response'."
   (when (and full-content (not (string-empty-p full-content)))
     (setq sly-agent-q--last-response full-content))
 
-  ;; Capture message start position before any modifications
-  (let ((msg-start (and agent-q--streaming-marker
-                        (marker-position agent-q--streaming-marker))))
+  ;; Buffer manipulation only when markers are initialized
+  ;; (This function may be called from CL via eval-in-emacs before buffer setup)
+  (when (and agent-q--output-end-marker
+             (marker-position agent-q--output-end-marker))
+    ;; Capture message start position before any modifications
+    (let ((msg-start (and agent-q--streaming-marker
+                          (marker-position agent-q--streaming-marker))))
 
-    ;; Insert content if it wasn't streamed
-    ;; (streaming-marker points to where content should appear, has insertion-type t)
-    (when (and agent-q--streaming-marker
-               full-content
-               (not (string-empty-p full-content)))
-      (save-excursion
-        (goto-char agent-q--streaming-marker)
-        (let ((inhibit-read-only t))
-          (insert full-content)
-          ;; streaming-marker advanced past content (insertion-type t)
-          ;; Update output-end-marker to track it
-          (set-marker agent-q--output-end-marker (point)))))
+      ;; Insert content if it wasn't streamed
+      ;; (streaming-marker points to where content should appear, has insertion-type t)
+      (when (and agent-q--streaming-marker
+                 full-content
+                 (not (string-empty-p full-content)))
+        (save-excursion
+          (goto-char agent-q--streaming-marker)
+          (let ((inhibit-read-only t))
+            (insert full-content)
+            ;; streaming-marker advanced past content (insertion-type t)
+            ;; Update output-end-marker to track it
+            (set-marker agent-q--output-end-marker (point)))))
 
-    ;; Finalize buffer display (add trailing newlines after content)
-    (let ((msg-end nil))
-      (save-excursion
-        (goto-char agent-q--output-end-marker)
-        (let ((inhibit-read-only t))
-          (insert "\n\n")
-          (setq msg-end (point))
-          (set-marker agent-q--output-end-marker (point))))
+      ;; Finalize buffer display (add trailing newlines after content)
+      (let ((msg-end nil))
+        (save-excursion
+          (goto-char agent-q--output-end-marker)
+          (let ((inhibit-read-only t))
+            (insert "\n\n")
+            (setq msg-end (point))
+            (set-marker agent-q--output-end-marker (point))))
 
-      ;; Apply markdown rendering to the message content
-      (when msg-start
-        (agent-q--render-markdown msg-start msg-end))
+        ;; Apply markdown rendering to the message content
+        (when msg-start
+          (agent-q--render-markdown msg-start msg-end))
 
-      ;; Insert message separator
-      (save-excursion
-        (goto-char agent-q--output-end-marker)
-        (agent-q--insert-message-separator)
-        (set-marker agent-q--output-end-marker (point)))))
+        ;; Insert message separator
+        (save-excursion
+          (goto-char agent-q--output-end-marker)
+          (agent-q--insert-message-separator)
+          (set-marker agent-q--output-end-marker (point))))))
 
   ;; Clean up state
   (setq agent-q--pending-response nil)
