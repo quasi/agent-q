@@ -83,19 +83,25 @@ that provide context to the LLM during conversation."
 ;;; Candidate Gathering
 
 (defun agent-q--file-candidates (prefix)
-  "Return file candidates matching PREFIX.
+  "Return file candidates matching PREFIX (substring match, case-insensitive).
 Searches project files if `project-current' returns a project.
+When PREFIX is empty, returns up to 50 recent project files.
 Each candidate has `agent-q-context-type' and `agent-q-context-data'
 text properties for use by the completion framework."
   (when-let ((project (project-current)))
-    (let ((files (project-files project)))
+    (let* ((case-fold-search t)
+           (files (project-files project))
+           (matching (if (string-empty-p prefix)
+                         (seq-take files 50)  ; Show some files when no prefix
+                       (seq-filter (lambda (f)
+                                     (string-match-p (regexp-quote prefix)
+                                                     (file-name-nondirectory f)))
+                                   files))))
       (mapcar (lambda (file)
                 (propertize (file-name-nondirectory file)
                             'agent-q-context-type :file
                             'agent-q-context-data (list :path file)))
-              (seq-filter (lambda (f)
-                            (string-prefix-p prefix (file-name-nondirectory f) t))
-                          files)))))
+              (seq-take matching 50)))))
 
 (defun agent-q--flatten-imenu (index prefix)
   "Flatten imenu INDEX, filtering by PREFIX.
@@ -135,19 +141,27 @@ overwhelming completion interfaces."
     (seq-take symbols 50)))
 
 (defun agent-q--buffer-candidates (prefix)
-  "Return buffer candidates matching PREFIX.
+  "Return buffer candidates matching PREFIX (substring match, case-insensitive).
 Excludes internal buffers (those starting with space).
+When PREFIX is empty, returns all non-internal buffers.
 Each candidate has `agent-q-context-type' set to :buffer and
-`agent-q-context-data' containing :buffer-name for later content fetching."
-  (mapcar (lambda (buf)
-            (propertize (buffer-name buf)
-                        'agent-q-context-type :buffer
-                        'agent-q-context-data (list :buffer-name (buffer-name buf))))
-          (seq-filter (lambda (buf)
-                        (let ((name (buffer-name buf)))
-                          (and (not (string-prefix-p " " name))
-                               (string-prefix-p prefix name t))))
-                      (buffer-list))))
+`agent-q-context-data' containing :buffer-name and :file-path (if visiting a file)."
+  (let* ((case-fold-search t)  ; case-insensitive matching
+         (buffers (seq-filter (lambda (buf)
+                                (let ((name (buffer-name buf)))
+                                  (and (not (string-prefix-p " " name))
+                                       (or (string-empty-p prefix)
+                                           (string-match-p (regexp-quote prefix) name)))))
+                              (buffer-list))))
+    (mapcar (lambda (buf)
+              (let ((file-path (buffer-file-name buf)))
+                (propertize (buffer-name buf)
+                            'agent-q-context-type :buffer
+                            'agent-q-context-data (if file-path
+                                                      (list :buffer-name (buffer-name buf)
+                                                            :file-path file-path)
+                                                    (list :buffer-name (buffer-name buf))))))
+            buffers)))
 
 ;;; Completion at Point
 
@@ -348,10 +362,36 @@ EVENT is the mouse event."
           (_ (message "Cannot visit this context type"))))
     (message "No context item at point")))
 
+(defun agent-q--pill-bounds-at-point ()
+  "Return (START . END) bounds of pill at point, or nil."
+  (let ((item (get-text-property (point) 'agent-q-context-item)))
+    (when item
+      (let ((start (previous-single-property-change (1+ (point)) 'agent-q-context-item))
+            (end (next-single-property-change (point) 'agent-q-context-item)))
+        (cons (or start (point-min))
+              (or end (point-max)))))))
+
 (defun agent-q-context-pill-remove ()
-  "Remove context pill at point."
+  "Remove context pill at point.
+Deletes the pill from the buffer and removes the associated
+context item from `agent-q-context-items'."
   (interactive)
-  (message "Remove not yet implemented"))
+  (if-let ((item (get-text-property (point) 'agent-q-context-item)))
+      (let ((bounds (agent-q--pill-bounds-at-point)))
+        ;; Remove from context list
+        (setq agent-q-context-items (delete item agent-q-context-items))
+        ;; Delete the pill text (including trailing space)
+        (when bounds
+          (let ((inhibit-read-only t))
+            (delete-region (car bounds)
+                           (min (1+ (cdr bounds)) (point-max)))))
+        ;; Refresh panel if visible
+        (when (get-buffer-window agent-q-context-panel-buffer)
+          (with-current-buffer agent-q-context-panel-buffer
+            (agent-q--refresh-context-panel)))
+        (message "Removed %s from context"
+                 (agent-q-context-item-display-name item)))
+    (message "No context pill at point")))
 
 (defun agent-q-context-pill-describe ()
   "Describe context pill at point."
@@ -568,6 +608,22 @@ prompts for the specific item. Adds the created item to
 
 ;;; LLM Integration
 
+(defun agent-q--context-item-file-path (item)
+  "Get file path for context ITEM if available.
+Returns the file path from :file-path in data for buffers,
+or :path for files. Returns nil if no file path is available."
+  (let ((data (agent-q-context-item-data item))
+        (type (agent-q-context-item-type item)))
+    (pcase type
+      (:file (plist-get data :path))
+      (:buffer (plist-get data :file-path))
+      (:symbol (when-let ((pos (plist-get data :position)))
+                 (when (markerp pos)
+                   (buffer-file-name (marker-buffer pos)))))
+      (:region (when-let ((buf (get-buffer (plist-get data :buffer))))
+                 (buffer-file-name buf)))
+      (_ nil))))
+
 (defun agent-q--format-context-for-llm ()
   "Format current context items for LLM prompt.
 Returns a string containing all context items formatted as a <context>
@@ -577,37 +633,139 @@ items are present.
 The format is:
   <context>
   ### display-name (type)
-  ```
+  File: /full/path/to/file.ext
+  ```language
   content
   ```
   </context>
 
-Context items are presented in reverse order (oldest first) since they
-were accumulated with `push'."
+The file path is included when available to help the LLM generate
+accurate diffs. Context items are presented in reverse order (oldest
+first) since they were accumulated with `push'."
   (when agent-q-context-items
     (concat
      "\n\n<context>\n"
      (mapconcat
       (lambda (item)
-        (format "### %s (%s)\n```\n%s\n```\n"
-                (agent-q-context-item-display-name item)
-                (agent-q-context-item-type item)
-                (or (agent-q-context-item-content item)
-                    "(content unavailable)")))
+        (let* ((file-path (agent-q--context-item-file-path item))
+               (lang (when file-path
+                       (pcase (file-name-extension file-path)
+                         ("lisp" "lisp")
+                         ("cl" "lisp")
+                         ("el" "emacs-lisp")
+                         ("py" "python")
+                         ("js" "javascript")
+                         ("ts" "typescript")
+                         (_ "")))))
+          (format "### %s (%s)%s\n```%s\n%s\n```\n"
+                  (agent-q-context-item-display-name item)
+                  (agent-q-context-item-type item)
+                  (if file-path (format "\nFile: %s" file-path) "")
+                  (or lang "")
+                  (or (agent-q-context-item-content item)
+                      "(content unavailable)"))))
       (reverse agent-q-context-items)
       "\n")
      "</context>\n")))
 
 ;;; Mode Setup
 
+(defcustom agent-q-context-auto-trigger t
+  "Whether to automatically trigger completion after @-mention prefix.
+When non-nil, completion will trigger after typing the minimum
+prefix length (see `agent-q-context-trigger-threshold')."
+  :type 'boolean
+  :group 'agent-q-context)
+
+(defcustom agent-q-context-trigger-threshold 2
+  "Minimum characters after @ before auto-triggering completion.
+For example, with value 2, typing `@ab' will trigger completion."
+  :type 'integer
+  :group 'agent-q-context)
+
+(defun agent-q--at-mention-prefix-length ()
+  "Return length of text after @ in current @-mention, or nil if not in one."
+  (save-excursion
+    (let ((original-point (point)))
+      (when (re-search-backward "@\\([^ \t\n]*\\)" (line-beginning-position) t)
+        (let ((match-end (match-end 0))
+              (at-pos (match-beginning 0)))
+          (when (<= original-point match-end)
+            (- match-end at-pos 1)))))))  ; -1 for the @ itself
+
+(defun agent-q--maybe-trigger-context-completion ()
+  "Trigger completion if @-mention prefix meets threshold.
+This function is intended for use with `post-self-insert-hook'."
+  (when (and agent-q-context-auto-trigger
+             (not buffer-read-only))
+    (let ((prefix-len (agent-q--at-mention-prefix-length)))
+      (when (and prefix-len
+                 (>= prefix-len agent-q-context-trigger-threshold))
+        ;; Use run-at-time to avoid issues with nested command loops
+        (run-at-time 0 nil #'agent-q--trigger-context-completion)))))
+
+(defun agent-q--trigger-context-completion ()
+  "Trigger context completion using completing-read.
+This works with any completion framework (Helm, Vertico, Ivy, default)."
+  (when-let ((completion-data (agent-q-context-complete-at-point)))
+    (let* ((start (nth 0 completion-data))
+           (end (nth 1 completion-data))
+           (props (nthcdr 3 completion-data))
+           (prefix (buffer-substring-no-properties start end))
+           (prefix-no-at (if (string-prefix-p "@" prefix)
+                             (substring prefix 1)
+                           prefix))
+           ;; Get candidates directly from our function
+           (candidates (agent-q--context-candidates prefix))
+           (annotate-fn (plist-get props :annotation-function)))
+      (when candidates
+        ;; Build completion table with annotations
+        (let ((selection (completing-read
+                          "Context @: "
+                          (lambda (string pred action)
+                            (if (eq action 'metadata)
+                                `(metadata
+                                  (annotation-function . ,annotate-fn)
+                                  (category . agent-q-context))
+                              (complete-with-action action candidates string pred)))
+                          nil nil prefix-no-at)))
+          (when (and selection (not (string-empty-p selection)))
+            ;; Find the candidate with text properties preserved
+            (let ((actual (seq-find (lambda (c) (string= c selection)) candidates)))
+              (when actual
+                ;; Get properties from the candidate
+                (let* ((type (get-text-property 0 'agent-q-context-type actual))
+                       (data (get-text-property 0 'agent-q-context-data actual))
+                       (item (make-agent-q-context-item
+                              :type type
+                              :display-name actual
+                              :data data
+                              :content (agent-q--fetch-context-content type data))))
+                  ;; Add to context list
+                  (push item agent-q-context-items)
+                  ;; Delete @-mention and insert pill
+                  (delete-region start end)
+                  (agent-q--insert-context-pill item)
+                  ;; Refresh panel if visible
+                  (when (get-buffer-window agent-q-context-panel-buffer)
+                    (with-current-buffer agent-q-context-panel-buffer
+                      (agent-q--refresh-context-panel))))))))))))
+
 (defun agent-q-context-setup ()
   "Set up context completion for current buffer.
 Adds `agent-q-context-complete-at-point' to `completion-at-point-functions'.
+When `agent-q-context-auto-trigger' is non-nil, also adds a hook to
+automatically trigger completion when @ is typed.
 Call this from `agent-q-chat-mode-hook' or similar initialization."
   ;; Make completion-at-point-functions buffer-local and add our CAPF
   (make-local-variable 'completion-at-point-functions)
   (add-to-list 'completion-at-point-functions
-               #'agent-q-context-complete-at-point))
+               #'agent-q-context-complete-at-point)
+  ;; Set up auto-trigger on @
+  (when agent-q-context-auto-trigger
+    (add-hook 'post-self-insert-hook
+              #'agent-q--maybe-trigger-context-completion
+              nil t)))
 
 (provide 'sly-agent-q-context)
 ;;; sly-agent-q-context.el ends here
