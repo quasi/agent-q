@@ -6,7 +6,7 @@ infrastructure:
 tracking:
   created: 2026-01-20T12:36:51Z
   last_check: 2026-01-20T12:36:51Z
-  last_modified: 2026-01-20T14:00:00Z
+  last_modified: 2026-01-20T16:00:00Z
 
 checkpoints:
   - skill: canon-initiate
@@ -16,6 +16,23 @@ checkpoints:
     phase: reconciliation (all 7 passes complete)
 
 changelog:
+  - date: 2026-01-20
+    type: feature-specified
+    summary: "Completed session-management feature specification (Phase 3)"
+    skill: manual
+    details: "Elevated from code-only to formal Canon spec: feature.yaml, 3 contracts, 3 properties, 3 scenarios. Documents persistent multi-session support with v1/v2 migration."
+    artifacts:
+      - features/session-management/feature.yaml
+      - features/session-management/contracts/session-storage.md
+      - features/session-management/contracts/session-persistence.md
+      - features/session-management/contracts/session-serialization.md
+      - features/session-management/properties/session-id-uniqueness.md
+      - features/session-management/properties/backwards-compatibility.md
+      - features/session-management/properties/auto-save-reliability.md
+      - features/session-management/scenarios/create-and-save-session.md
+      - features/session-management/scenarios/switch-between-sessions.md
+      - features/session-management/scenarios/session-search.md
+
   - date: 2026-01-20
     type: features-completed
     summary: "Completed 3 high-confidence feature specifications (Phases 2-3)"

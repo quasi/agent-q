@@ -1,0 +1,231 @@
+# Session Management Feature
+# Phase: 3 (Chat Phase 3: Multi-Session Support)
+# Status: Complete
+# Confidence: 0.90
+
+feature:
+  name: session-management
+  version: 2.0.0
+  status: complete
+  confidence: 0.90
+  triangulation: convergent
+  phase: 3
+
+  description: |
+    Persistent session storage with multi-session support for Agent-Q conversations.
+    Sessions wrap conversations with metadata (name, timestamps, model, token usage)
+    and provide disk persistence across Emacs/Lisp restarts.
+
+    Architecture moved from Elisp (v1) to Common Lisp (v2) for better reliability
+    and cross-platform support. Backwards compatible with v1 format.
+
+    Implements Chat Phase 3 from phased development plan (ADR-0005).
+
+metadata:
+  primary_files:
+    - src/session.lisp  # 437 lines - Core persistence
+    - contrib/sly-agent-q/sly-agent-q-sessions.el  # 327 lines - UI layer
+    - contrib/sly-agent-q/test/sly-agent-q-sessions-test.el  # Test suite
+
+  specification:
+    - docs/USER-GUIDE.md  # User-facing documentation
+    - specs/PHASE-3-SPEC.md  # Original phase specification
+
+  tests:
+    file: contrib/sly-agent-q/test/sly-agent-q-sessions-test.el
+    count: 20
+    pass_rate: "100%"
+    coverage: "Session CRUD, persistence, switching, auto-save, mode line"
+    categories:
+      connection: 1      # SLY connection checks
+      timestamp: 3       # Timestamp formatting
+      modeline: 5        # Mode line display
+      autosave: 5        # Auto-save timer
+      initialization: 1  # Setup
+      edge_cases: 3      # Nil handling, empty states
+      rpc: 2             # RPC function calls
+
+  dependencies:
+    internal:
+      - conversation  # Session wraps conversation
+      - context       # Context attached to session conversation
+      - chat-interface  # UI integration
+    external:
+      - SLY RPC protocol  # Elisp-CL communication
+      - Common Lisp file I/O  # Disk persistence
+
+inventory:
+  components:
+    - name: "Session Class"
+      description: "CLOS class wrapping conversation with metadata"
+      lines: ~100
+      tests: implicit (via CRUD tests)
+
+    - name: "Session Manager"
+      description: "Global manager with cache and directory handling"
+      lines: ~80
+      tests: implicit (via operations)
+
+    - name: "Serialization (v2)"
+      description: "Native CL plist format with readable S-expressions"
+      lines: ~60
+      tests: implicit (via save/load)
+
+    - name: "Serialization (v1 compat)"
+      description: "Elisp format conversion for migration"
+      lines: ~90
+      tests: implicit (via load)
+
+    - name: "Persistence Operations"
+      description: "Save, load, delete, list, search"
+      lines: ~150
+      tests: 20 (Elisp UI layer)
+
+    - name: "UI Layer (Elisp)"
+      description: "RPC wrappers, completion, mode line"
+      lines: ~327
+      tests: 20
+
+    - name: "Auto-Save System"
+      description: "Timer-based and buffer-kill hooks"
+      lines: ~50
+      tests: 5
+
+  session_fields:
+    - id: "session-YYYYMMDD-HHMMSS-XXXX (unique identifier)"
+    - name: "User-friendly name (optional)"
+    - created-at: "Universal time when created"
+    - updated-at: "Universal time of last modification"
+    - conversation: "Conversation object (messages + context)"
+    - model: "LLM model used (e.g., claude-sonnet-4-20250514)"
+    - metadata: "Plist (:total-input-tokens, :total-output-tokens, :provider, etc.)"
+
+  storage_format:
+    version: 2
+    filename: "session-YYYYMMDD-HHMMSS-XXXX.lisp"
+    location: "~/.emacs.d/agent-q-sessions/"
+    encoding: "S-expression (readable, pretty-printed)"
+    header: "Fast metadata extraction via comments"
+
+architecture:
+  session_lifecycle:
+    create: "Generate unique ID, wrap new conversation, cache in manager"
+    save: "Update timestamp, serialize to disk, update cache"
+    load: "Read from file, deserialize (v1 or v2), cache result"
+    switch: "Save current, load new, update current-session pointer"
+    delete: "Remove from cache and disk"
+
+  persistence_strategy:
+    storage: "One file per session in sessions directory"
+    caching: "Hash table (session-id → session) for performance"
+    auto_save: "Timer every 300s + buffer kill hook"
+    fast_listing: "Metadata extraction from file headers (no full parse)"
+
+  serialization:
+    v2_format: |
+      (:version 2
+       :id "session-20260120-123456-ABCD"
+       :name "My Session"
+       :created-at 3945234600
+       :updated-at 3945237200
+       :model "claude-sonnet-4-20250514"
+       :metadata (:total-input-tokens 1000 :total-output-tokens 500)
+       :messages ((:role :user :content "Hello" :timestamp 3945234600)
+                  (:role :assistant :content "Hi!" :timestamp 3945234650)))
+
+    v1_format: |
+      Legacy Elisp format with:
+      - Symbol roles ('user, 'assistant) → converted to keywords
+      - Emacs timestamps (HIGH LOW USEC PSEC) → universal-time
+      - Reversed message order (newest-first) → oldest-first
+
+  ui_integration:
+    commands:
+      - "C-c C-s (agent-q-switch-session): Switch to different session"
+      - "C-c C-n (agent-q-new-session): Create new session"
+      - "C-c C-f (agent-q-search-sessions): Search by name/content"
+      - "C-c C-r (agent-q-name-session): Rename current session"
+      - "C-c C-d (agent-q-delete-session): Delete session"
+
+    modeline:
+      format: "[name-or-id:msg-count ↑input↓output]"
+      example: "[My Session:5 ↑1000↓500]"
+      updates: "Via RPC when connected, local state otherwise"
+
+features:
+  persistence:
+    - Disk storage in ~/.emacs.d/agent-q-sessions/
+    - Readable S-expression format (can edit manually)
+    - Header comments for fast metadata extraction
+    - Automatic directory creation
+    - Safe file operations (supersede on write)
+
+  multi_session:
+    - Create unlimited sessions
+    - Switch between sessions with completion
+    - Search by name or message content
+    - List all sessions sorted by creation time
+    - Delete sessions with confirmation
+
+  auto_save:
+    - Timer-based periodic saves (configurable interval)
+    - Save on buffer kill (prevents data loss)
+    - Save before switching sessions
+    - Async RPC (non-blocking)
+
+  migration:
+    - Backwards compatible with v1 (Elisp) format
+    - Automatic conversion on load
+    - Timestamp conversion (Emacs → universal-time)
+    - Role conversion (symbols → keywords)
+    - Message order reversal (v1 newest-first → v2 oldest-first)
+
+  performance:
+    - Session cache (hash table) for fast access
+    - Fast listing via header comment parsing
+    - Search optimizes by checking names first
+    - Only full load when needed
+
+test_coverage:
+  connection_checks: 1      # Verify SLY connection before RPC
+  timestamp_formatting: 3   # CL universal-time → readable string
+  modeline_display: 5       # Name, ID, message count, tokens, RPC fallback
+  autosave_timer: 5         # Setup, cancel, interval, flag, disabled states
+  initialization: 1         # Mode line integration
+  edge_cases: 3             # Nil session, no name, no tokens
+  rpc_functions: 2          # Async save, sync list, name passing
+  total: 20
+
+quality_metrics:
+  test_coverage: good (20 tests for UI layer, CL layer manual)
+  code_quality: excellent (clear separation: CL persistence, Elisp UI)
+  user_experience: excellent (auto-save, search, completion)
+  migration: excellent (v1 compat, zero user intervention)
+  documentation: very_good (user guide + inline docs)
+
+known_gaps:
+  - "No Common Lisp unit tests (only Elisp UI tests)"
+  - "No session export/import (e.g., to share sessions)"
+  - "No session merge (combine two sessions)"
+  - "No session tags/categories for organization"
+  - "Search is linear (could use full-text index for large session sets)"
+  - "No session size limits (unbounded message history)"
+
+design_decisions:
+  - "CL persistence: Moved from Elisp for reliability (ADR-0001)"
+  - "v2 format: Readable S-expressions for debuggability"
+  - "Fast listing: Header comments avoid full parse for metadata"
+  - "Session-first lookup: Session conversation canonical (ADR-0001)"
+  - "Auto-save: Prevent data loss without user intervention"
+  - "RPC architecture: Elisp UI, CL persistence (clean separation)"
+
+related_features:
+  - conversation  # Session wraps conversation
+  - context-completion  # Context attached to session
+  - chat-interface  # UI displays session info
+
+references:
+  - ADR-0001: Session-Conversation Unification
+  - ADR-0005: Phased Chat Development (sessions was Chat Phase 3)
+  - specs/PHASE-3-SPEC.md: Original session specification
+  - commit 555703e8: "fix(session): connect agent conversation to session for persistence"
