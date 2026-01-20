@@ -72,13 +72,15 @@
               ((not (find #\* pattern))
                (string= name pattern))
               ;; Suffix match (*.fasl)
-              ((and (char= (char pattern 0) #\*)
+              ((and (> (length pattern) 0)
+                    (char= (char pattern 0) #\*)
                     (not (find #\* pattern :start 1)))
                (let ((suffix (subseq pattern 1)))
                  (and (>= (length name) (length suffix))
                       (string= suffix name :start2 (- (length name) (length suffix))))))
               ;; Prefix match (TODO*)
-              ((and (char= (char pattern (1- (length pattern))) #\*)
+              ((and (> (length pattern) 0)
+                    (char= (char pattern (1- (length pattern))) #\*)
                     (not (find #\* pattern :end (1- (length pattern)))))
                (let ((prefix (subseq pattern 0 (1- (length pattern)))))
                  (and (>= (length name) (length prefix))
@@ -128,29 +130,28 @@
   (if (getf tree :error)
       (format nil "Error: ~A" (getf tree :error))
       (with-output-to-string (s)
+        (let ((spaces (make-string indent :initial-element #\Space))
+              (name (getf tree :name))
+              (type (getf tree :type))
+              (children (getf tree :children)))
 
-    (let ((spaces (make-string indent :initial-element #\Space))
-          (name (getf tree :name))
-          (type (getf tree :type))
-          (children (getf tree :children)))
+          ;; Print current node
+          (format s "~A~A~A~%"
+                  spaces
+                  (if (eq type :directory) "[DIR] " "[FILE] ")
+                  name)
 
-      ;; Print current node
-      (format s "~A~A~A~%"
-              spaces
-              (if (eq type :directory) "[DIR]  " "[FILE] ")
-              name)
-
-      ;; Recurse for children
-      (when children
-        (dolist (child children)
-          (if (eq (getf child :type) :directory)
-              (format s "~A" (format-directory-tree child (+ indent 2)))
-              (let ((child-name (getf child :name))
-                    (child-size (getf child :size)))
-                (format s "~A[FILE] ~A~@[ (~A)~]~%"
-                        (make-string (+ indent 2) :initial-element #\Space)
-                        child-name
-                        (when child-size (format-file-size child-size)))))))))))
+          ;; Recurse for children
+          (when children
+            (dolist (child children)
+              (if (eq (getf child :type) :directory)
+                  (format s "~A" (format-directory-tree child (+ indent 2)))
+                  (let ((child-name (getf child :name))
+                        (child-size (getf child :size)))
+                    (format s "~A[FILE] ~A~@[ (~A)~]~%"
+                            (make-string (+ indent 2) :initial-element #\Space)
+                            child-name
+                            (when child-size (format-file-size child-size)))))))))))
 
 ;;; ============================================================================
 ;;; list_directory Tool
