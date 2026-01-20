@@ -418,6 +418,46 @@
   (register-tool *agent-q-registry* tool))
 
 ;;; ============================================================================
+;;; search_files Tool
+;;; ============================================================================
+;;; ABOUTME: Search for files matching a glob pattern. Exposes file search
+;;; functionality to the LLM with support for * and ** wildcards and exclusions.
+
+(let ((tool (define-tool
+              "search_files"
+              "Search for files matching a glob pattern. Supports * (wildcard) and ** (recursive).
+               Examples: '*.lisp' finds all Lisp files, '**/*.md' finds markdown files recursively."
+              '((:name "pattern" :type :string :description "Glob pattern (e.g., '*.lisp', '**/*.md')")
+                (:name "path" :type :string :description "Starting directory (relative to project root, default: '.')")
+                (:name "exclude_patterns" :type :array :description "Patterns to exclude (e.g., ['.git', '*.fasl'])"))
+              :required '("pattern")
+              :safety-level :safe
+              :categories '(:filesystem :search)
+              :handler (lambda (args)
+                         (block search-files-handler
+                           (let* ((pattern (gethash "pattern" args))
+                                  (path (or (gethash "path" args) "."))
+                                  (exclusions (gethash "exclude_patterns" args))
+                                  (resolved (agent-q::resolve-project-path path)))
+                             (unless resolved
+                               (return-from search-files-handler
+                                 (format nil "Error: Path '~A' is outside project root" path)))
+
+                             (handler-case
+                                 (let ((results (search-files-recursively
+                                                (namestring resolved) pattern exclusions)))
+                                   (if results
+                                       (with-output-to-string (s)
+                                         (format s "Found ~D file~:P matching '~A':~%~%"
+                                                (length results) pattern)
+                                         (dolist (file results)
+                                           (format s "  ~A~%" file)))
+                                       (format nil "No files found matching pattern '~A'" pattern)))
+                               (error (e)
+                                 (format nil "Error searching files: ~A" e)))))))))
+  (register-tool *agent-q-registry* tool))
+
+;;; ============================================================================
 ;;; File Content Helpers
 ;;; ============================================================================
 ;;; ABOUTME: Helpers for reading, writing, and diffing file contents.

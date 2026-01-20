@@ -21,7 +21,11 @@
   (:import-from #:cl-llm-provider
                 #:complete
                 #:response-content
-                #:response-tool-calls)
+                #:response-tool-calls
+                #:tool-handler
+                #:tool-name
+                #:tool-description
+                #:tool-required-params)
   (:export
    ;; Test suites
    #:core-functionality

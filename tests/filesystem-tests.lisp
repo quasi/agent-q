@@ -336,7 +336,7 @@
   "directory_tree should not require any parameters"
   (let ((tool (find-tool-definition "directory_tree")))
     (is (not (null tool)))
-    (let ((required (tool-required tool)))
+    (let ((required (tool-required-params tool)))
       (is (or (null required) (= 0 (length required)))))))
 
 (test directory-tree-has-description
@@ -372,7 +372,7 @@
            (let* ((tool (agent-q.tools::find-tool-definition "directory_tree"))
                   (args (make-hash-table :test 'equal)))
              (setf (gethash "path" args) ".")
-             (let ((result (funcall (agent-q.tools::tool-handler tool) args)))
+             (let ((result (funcall (tool-handler tool) args)))
                (is (stringp result))
                (is (search "[DIR]" result))
                (is (search "src" result))
@@ -397,12 +397,116 @@
                   (args (make-hash-table :test 'equal)))
              (setf (gethash "path" args) ".")
              (setf (gethash "exclude_patterns" args) (list ".git" "*.fasl"))
-             (let ((result (funcall (agent-q.tools::tool-handler tool) args)))
+             (let ((result (funcall (tool-handler tool) args)))
                (is (not (search ".git" result)))
                (is (not (search "code.fasl" result)))
                (is (search "src" result)))))
       ;; Cleanup
       (uiop:delete-directory-tree agent-q:*project-root* :validate t :if-does-not-exist :ignore))))
+
+;;; ============================================================================
+;;; search_files Tool Tests
+;;; ============================================================================
+;;; ABOUTME: Tests for the search_files tool which exposes file searching to the LLM.
+;;; Uses glob patterns with support for * and ** wildcards, respects exclusions.
+
+(test search-files-tool-exists
+  "search_files tool should be registered"
+  (let ((tool (find-tool-definition "search_files")))
+    (is (not (null tool)))
+    (is (equal (tool-name tool) "search_files"))))
+
+(test search-files-is-safe
+  "search_files should have :safe safety level"
+  (let ((safe-tools (agent-q.tools:get-agent-q-tools :max-safety-level :safe)))
+    (is (find "search_files" safe-tools :test #'equal :key #'tool-name))))
+
+(test search-files-has-required-parameters
+  "search_files should require the pattern parameter"
+  (let ((tool (find-tool-definition "search_files")))
+    (is (not (null tool)))
+    (let ((required (tool-required-params tool)))
+      (is (member "pattern" required :test #'equal)))))
+
+(test search-files-has-description
+  "search_files should have a description mentioning search and glob"
+  (let ((tool (find-tool-definition "search_files")))
+    (is (not (null tool)))
+    (is (or (search "search" (tool-description tool) :test #'char-equal)
+            (search "glob" (tool-description tool) :test #'char-equal)))))
+
+(test search-files-tool-basic
+  "Test search_files tool finds matching files"
+  (skip "Requires Emacs connection - integration test only")
+  (let ((agent-q:*project-root* (merge-pathnames "test-project/" (uiop:temporary-directory))))
+    (unwind-protect
+         (progn
+           ;; Setup test structure
+           (ensure-directories-exist (merge-pathnames "src/" agent-q:*project-root*))
+           (with-open-file (s (merge-pathnames "main.lisp" agent-q:*project-root*)
+                              :direction :output)
+             (write-string "test" s))
+           (with-open-file (s (merge-pathnames "src/package.lisp" agent-q:*project-root*)
+                              :direction :output)
+             (write-string "test" s))
+           (with-open-file (s (merge-pathnames "readme.md" agent-q:*project-root*)
+                              :direction :output)
+             (write-string "test" s))
+
+           (let* ((tool (find-tool-definition "search_files"))
+                  (args (make-hash-table :test 'equal)))
+             (setf (gethash "pattern" args) "*.lisp")
+             (setf (gethash "path" args) ".")
+             (let ((result (funcall (tool-handler tool) args)))
+               (is (stringp result))
+               (is (search "main.lisp" result))
+               (is (search "package.lisp" result))
+               (is (not (search "readme.md" result))))))
+      ;; Cleanup
+      (uiop:delete-directory-tree agent-q:*project-root* :validate t :if-does-not-exist :ignore))))
+
+(test search-files-tool-recursive
+  "Test search_files with recursive pattern"
+  (skip "Requires Emacs connection - integration test only")
+  (let ((agent-q:*project-root* (merge-pathnames "test-project/" (uiop:temporary-directory))))
+    (unwind-protect
+         (progn
+           ;; Deep nesting
+           (ensure-directories-exist (merge-pathnames "src/tools/" agent-q:*project-root*))
+           (with-open-file (s (merge-pathnames "src/tools/buffer.lisp" agent-q:*project-root*)
+                              :direction :output)
+             (write-string "test" s))
+
+           (let* ((tool (find-tool-definition "search_files"))
+                  (args (make-hash-table :test 'equal)))
+             (setf (gethash "pattern" args) "**/*.lisp")
+             (setf (gethash "path" args) ".")
+             (let ((result (funcall (tool-handler tool) args)))
+               (is (search "buffer.lisp" result)))))
+      ;; Cleanup
+      (uiop:delete-directory-tree agent-q:*project-root* :validate t :if-does-not-exist :ignore))))
+
+(test search-files-tool-no-matches
+  "Test search_files when no files match"
+  (skip "Requires Emacs connection - integration test only")
+  (let ((agent-q:*project-root* (uiop:temporary-directory)))
+    (let* ((tool (find-tool-definition "search_files"))
+           (args (make-hash-table :test 'equal)))
+      (setf (gethash "pattern" args) "*.nonexistent")
+      (setf (gethash "path" args) ".")
+      (let ((result (funcall (tool-handler tool) args)))
+        (is (search "No files found" result))))))
+
+(test search-files-tool-path-validation
+  "Test search_files validates project root"
+  (let ((agent-q:*project-root* (uiop:temporary-directory)))
+    (let* ((tool (find-tool-definition "search_files"))
+           (args (make-hash-table :test 'equal)))
+      (setf (gethash "pattern" args) "*")
+      (setf (gethash "path" args) "../../etc")
+      (let ((result (funcall (tool-handler tool) args)))
+        (is (search "Error" result))
+        (is (search "outside project root" result))))))
 
 ;;; ============================================================================
 ;;; list_directory Tool Tests
@@ -426,7 +530,7 @@
   "list_directory should require the path parameter"
   (let ((tool (find-tool-definition "list_directory")))
     (is (not (null tool)))
-    (let ((required (tool-required tool)))
+    (let ((required (tool-required-params tool)))
       (is (member "path" required :test #'equal)))))
 
 (test list-directory-has-description
@@ -456,7 +560,7 @@
   "get_file_info should require the path parameter"
   (let ((tool (find-tool-definition "get_file_info")))
     (is (not (null tool)))
-    (let ((required (tool-required tool)))
+    (let ((required (tool-required-params tool)))
       (is (member "path" required :test #'equal)))))
 
 (test get-file-info-has-description
@@ -486,7 +590,7 @@
   "get_project_root should not require any parameters"
   (let ((tool (find-tool-definition "get_project_root")))
     (is (not (null tool)))
-    (let ((required (tool-required tool)))
+    (let ((required (tool-required-params tool)))
       (is (or (null required) (= 0 (length required)))))))
 
 (test get-project-root-returns-path
@@ -559,7 +663,7 @@ def bar"))))
   (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
          (tool (find "edit_file" tools :test #'equal :key #'tool-name)))
     (is (not (null tool)))
-    (let ((required (tool-required tool)))
+    (let ((required (tool-required-params tool)))
       (is (member "path" required :test #'equal))
       (is (member "old_str" required :test #'equal))
       (is (member "new_str" required :test #'equal)))))
