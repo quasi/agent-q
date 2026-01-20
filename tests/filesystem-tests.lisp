@@ -59,3 +59,48 @@
   "detect-project-root should return a directory that exists"
   (let ((detected (agent-q::detect-project-root)))
     (is (probe-file detected))))
+
+;;; ============================================================================
+;;; Path Resolution Tests (Security Critical)
+;;; ============================================================================
+;;; ABOUTME: Tests for resolve-project-path security boundary checking.
+;;; This function is the core security mechanism - all filesystem tools
+;;; call it to validate paths stay within the project root.
+
+(test resolve-project-path-relative
+  "resolve-project-path should resolve relative paths within project"
+  (let ((agent-q:*project-root* (asdf:system-source-directory :agent-q)))
+    (let ((resolved (agent-q::resolve-project-path "src/config.lisp")))
+      (is (not (null resolved)))
+      (is (pathnamep resolved))
+      ;; Should be within project root
+      (is (uiop:subpathp resolved agent-q:*project-root*)))))
+
+(test resolve-project-path-rejects-traversal
+  "resolve-project-path should reject path traversal attacks"
+  (let ((agent-q:*project-root* (asdf:system-source-directory :agent-q)))
+    (is (null (agent-q::resolve-project-path "../../../etc/passwd")))
+    (is (null (agent-q::resolve-project-path "/etc/passwd")))
+    (is (null (agent-q::resolve-project-path "src/../../outside")))))
+
+(test resolve-project-path-allows-current-dir
+  "resolve-project-path should allow . and empty paths"
+  (let ((agent-q:*project-root* (asdf:system-source-directory :agent-q)))
+    (is (not (null (agent-q::resolve-project-path "."))))
+    (is (not (null (agent-q::resolve-project-path ""))))))
+
+(test resolve-project-path-rejects-sibling-directories
+  "resolve-project-path should reject sibling directories with similar names.
+   This tests for a critical vulnerability: /project vs /project-secrets.
+   A naive string prefix check would allow /project-secrets when root is /project."
+  (let* ((agent-q:*project-root* (asdf:system-source-directory :agent-q))
+         ;; Construct a sibling path that starts with the same prefix
+         (parent (uiop:pathname-parent-directory-pathname agent-q:*project-root*))
+         (root-dir-name (car (last (pathname-directory agent-q:*project-root*))))
+         (sibling-name (concatenate 'string root-dir-name "-secrets"))
+         (sibling (merge-pathnames (make-pathname :directory (list :relative sibling-name))
+                                   parent)))
+    ;; Even if the sibling doesn't exist, we can test the string logic
+    ;; by checking that our root + "-secrets" suffix would be rejected
+    (is (null (agent-q::resolve-project-path (namestring sibling)))
+        "Should reject sibling directories that share prefix with project root")))

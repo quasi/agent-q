@@ -141,3 +141,45 @@
            (ignore-errors (funcall default-dir))))))
    ;; 4. Current working directory
    *default-pathname-defaults*))
+
+;;; ============================================================================
+;;; Path Resolution with Security Boundary Checking
+;;; ============================================================================
+;;; ABOUTME: Security-critical path resolution that prevents access outside
+;;; the project root. All filesystem tools MUST call resolve-project-path
+;;; before any operation to validate paths stay within the project boundary.
+
+(defun ensure-project-root ()
+  "Ensure *project-root* is set, auto-detecting if needed.
+   Returns the project root pathname."
+  (or *project-root*
+      (setf *project-root* (detect-project-root))
+      (error "No project root configured and auto-detection failed.")))
+
+(defun resolve-project-path (path)
+  "Resolve PATH relative to project root.
+   Returns canonical absolute path if within boundary.
+   Returns NIL if path is outside project root (SECURITY).
+
+   Security considerations:
+   - Path traversal (../) must not escape project root
+   - Absolute paths outside root are rejected
+   - Symlinks are resolved BEFORE boundary checking
+     (a symlink inside project could point outside)"
+  (handler-case
+      (let* ((root (ensure-project-root))
+             (root-truename (truename root))
+             (root-str (namestring root-truename))
+             ;; Merge relative paths with root
+             (merged (if (uiop:absolute-pathname-p path)
+                        (pathname path)
+                        (merge-pathnames path root-truename)))
+             ;; Resolve symlinks and canonicalize
+             (resolved (ignore-errors (truename merged))))
+        (when resolved
+          ;; Security check: use UIOP's well-tested subpathp
+          ;; This correctly handles sibling directory attacks like:
+          ;; root=/project, attack=/project-secrets (shares prefix but not inside)
+          (when (uiop:subpathp resolved root-truename)
+            resolved)))
+    (error () nil)))
