@@ -240,6 +240,47 @@
       (is (search "Error: Access denied" output)))))
 
 ;;; ============================================================================
+;;; directory_tree Tool Tests
+;;; ============================================================================
+;;; ABOUTME: Tests for the directory_tree tool which shows recursive directory
+;;; structure. Uses resolve-project-path for security and supports exclusions.
+
+(test directory-tree-tool-exists
+  "directory_tree tool should be registered"
+  (let ((tool (find-tool-definition "directory_tree")))
+    (is (not (null tool)))
+    (is (equal (tool-name tool) "directory_tree"))))
+
+(test directory-tree-is-safe
+  "directory_tree should have :safe safety level"
+  (let ((safe-tools (agent-q.tools:get-agent-q-tools :max-safety-level :safe)))
+    (is (find "directory_tree" safe-tools :test #'equal :key #'tool-name))))
+
+(test directory-tree-has-no-required-parameters
+  "directory_tree should not require any parameters"
+  (let ((tool (find-tool-definition "directory_tree")))
+    (is (not (null tool)))
+    (let ((required (tool-required tool)))
+      (is (or (null required) (= 0 (length required)))))))
+
+(test directory-tree-has-description
+  "directory_tree should have a description mentioning tree or structure"
+  (let ((tool (find-tool-definition "directory_tree")))
+    (is (not (null tool)))
+    (is (or (search "tree" (tool-description tool) :test #'char-equal)
+            (search "structure" (tool-description tool) :test #'char-equal)))))
+
+(test directory-tree-tool-path-validation
+  "Test directory_tree rejects paths outside project root"
+  (let ((agent-q:*project-root* (uiop:temporary-directory)))
+    (let* ((tool (find-tool-definition "directory_tree"))
+           (args (make-hash-table :test 'equal)))
+      (setf (gethash "path" args) "../../etc")
+      (let ((result (funcall (tool-handler tool) args)))
+        (is (search "Error" result))
+        (is (search "outside project root" result))))))
+
+;;; ============================================================================
 ;;; list_directory Tool Tests
 ;;; ============================================================================
 ;;; ABOUTME: Tests for the list_directory tool which lists files and directories

@@ -249,6 +249,42 @@
   (register-tool *agent-q-registry* tool))
 
 ;;; ============================================================================
+;;; directory_tree Tool
+;;; ============================================================================
+;;; ABOUTME: Shows recursive directory structure with optional exclusions.
+;;; Useful for understanding project layout and navigating large codebases.
+
+(let ((tool (define-tool
+              "directory_tree"
+              "Get a recursive directory tree showing the hierarchical structure.
+               Useful for understanding project layout. Can exclude patterns like .git, *.fasl."
+              '((:name "path" :type :string :description "Directory path (relative to project root, default: '.')")
+                (:name "exclude_patterns" :type :array :description "List of glob patterns to exclude (e.g., ['.git', '*.fasl'])"))
+              :required '()
+              :safety-level :safe
+              :categories '(:filesystem :navigation)
+              :handler (lambda (args)
+                         (block directory-tree-handler
+                           (let* ((path (or (gethash "path" args) "."))
+                                  (exclusions (gethash "exclude_patterns" args))
+                                  (resolved (agent-q::resolve-project-path path)))
+                             (unless resolved
+                               (return-from directory-tree-handler
+                                 (format nil "Error: Path '~A' is outside project root" path)))
+
+                             (handler-case
+                                 (let* ((tree (build-directory-tree (namestring resolved) exclusions))
+                                        (formatted (format-directory-tree tree)))
+                                   (with-output-to-string (s)
+                                     (format s "Directory tree: ~A~%~%" (namestring resolved))
+                                     (when exclusions
+                                       (format s "Excluding: ~{~A~^, ~}~%~%" exclusions))
+                                     (format s "~A" formatted)))
+                               (error (e)
+                                 (format nil "Error building directory tree: ~A" e)))))))))
+  (register-tool *agent-q-registry* tool))
+
+;;; ============================================================================
 ;;; get_project_root Tool
 ;;; ============================================================================
 ;;; ABOUTME: Reports the current project root directory and how it was detected.
