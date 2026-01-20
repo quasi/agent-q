@@ -8,6 +8,20 @@
 ;;; Helper Functions
 ;;; ============================================================================
 
+(defun count-substring (needle haystack)
+  "Count non-overlapping occurrences of NEEDLE in HAYSTACK.
+   Matching is exact (whitespace-sensitive)."
+  (let ((count 0)
+        (pos 0)
+        (needle-len (length needle)))
+    (when (> needle-len 0)
+      (loop
+        (let ((found (search needle haystack :start2 pos)))
+          (unless found (return))
+          (incf count)
+          (setf pos (+ found needle-len)))))
+    count))
+
 (defun format-file-size (bytes)
   "Format BYTES as human-readable size."
   (cond

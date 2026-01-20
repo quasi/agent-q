@@ -204,3 +204,31 @@
     (let ((result (funcall handler (make-hash-table :test 'equal))))
       (is (stringp result))
       (is (search "Detection method" result)))))
+
+;;; ============================================================================
+;;; Edit Helper Function Tests
+;;; ============================================================================
+;;; ABOUTME: Tests for count-substring helper used by edit_file tool.
+;;; The count-substring function counts non-overlapping occurrences of a
+;;; substring, used to determine if old_str is unique for replacement.
+
+(test count-substring-basic
+  "count-substring should count occurrences"
+  (is (= 0 (agent-q.tools::count-substring "foo" "bar baz")))
+  (is (= 1 (agent-q.tools::count-substring "foo" "foo bar")))
+  (is (= 3 (agent-q.tools::count-substring "foo" "foo foo foo"))))
+
+(test count-substring-whitespace-sensitive
+  "count-substring should be whitespace sensitive"
+  (is (= 0 (agent-q.tools::count-substring "foo bar" "foo  bar")))  ; 2 spaces vs 1
+  (is (= 1 (agent-q.tools::count-substring "foo  bar" "foo  bar")))) ; exact match
+
+(test count-substring-multiline
+  "count-substring should handle multiline strings"
+  (is (= 2 (agent-q.tools::count-substring "def" "def foo
+def bar"))))
+
+(test count-substring-overlapping
+  "count-substring should count non-overlapping occurrences"
+  ;; "aa" in "aaa" should be 1, not 2 (non-overlapping)
+  (is (= 1 (agent-q.tools::count-substring "aa" "aaa"))))
