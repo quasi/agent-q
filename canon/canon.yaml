@@ -5,9 +5,10 @@
 
 metadata:
   name: "Agent-Q"
-  version: "0.3.0"
+  version: "0.5.0"
   description: "AI-powered agentic extension for Common Lisp development"
   canonical_source: "Extracted from existing codebase via triangulation"
+  last_updated: "2026-01-21"
 
   initiation:
     method: "canon-initiate (triangulation v0.2.0)"
@@ -106,34 +107,25 @@ features:
   - name: "file-system-tools"
     path: "features/file-system-tools/"
     phase: 2
-    status: draft
-    confidence: 0.70
-    triangulation: research_only
-    description: "Comprehensive file reading, writing, editing, and navigation tools"
+    status: stable
+    implementation_status: partial
+    confidence: 0.95
+    triangulation: convergent
+    description: "File system tools for directory navigation, file inspection, searching, and targeted editing"
     key_files:
-      - "src/tools/buffer.lisp"
-      - "src/tools/filesystem.lisp (planned)"
-    tests: 0
+      - "src/tools/filesystem.lisp"
+      - "tests/filesystem-tests.lisp"
+    tests: 64
+    contracts_implemented: 6
+    contracts_planned: 4
     depends_on:
       - "tool-system"
       - "diff-approval"
     research: "canon/research/2026-01-20-file-system-tools.research.md"
     notes: |
-      New feature extending tool-system with:
-      - Directory listing and tree navigation
-      - str_replace style file editing
-      - Project root boundary enforcement
-      - File creation, move, delete with approval
-    status: complete
-    confidence: 0.95
-    triangulation: convergent
-    description: "Per-hunk diff review with unified diff format (v0.3.0)"
-    key_files:
-      - "src/tools/diff.lisp"
-      - "contrib/sly-agent-q/sly-agent-q-diff.el"
-      - "docs/DIFF-IMPLEMENTATION.AGENT.md"
-    tests: 10
-    notes: "Exemplary specification-to-implementation fidelity"
+      Phase 1 (core navigation), Phase 2 (advanced navigation), and Phase 3 (editing) complete.
+      Implemented tools: list_directory, get_file_info, get_project_root, directory_tree, search_files, edit_file
+      Planned tools: insert_at_line, create_file, move_file, delete_file
 
   # Chat Features (Phase 1-3)
   - name: "chat-interface"
@@ -213,9 +205,9 @@ vocabulary:
 # ═══════════════════════════════════════════════════════════════
 
 decisions:
-  count: 5
+  count: 6
   recovered: 13
-  documented: 5
+  documented: 6
   source: "core/decisions/*.md"
   key_decisions:
     - "0001-session-conversation-unification.md"
@@ -223,6 +215,7 @@ decisions:
     - "0003-elisp-first-testing.md"
     - "0004-fail-open-cost-estimation.md"
     - "0005-phased-chat-development.md"
+    - "0006-partial-feature-stabilization.md"
 
 # ═══════════════════════════════════════════════════════════════
 # QUALITY METRICS
@@ -232,7 +225,7 @@ quality:
   spec_adherence: "93%"
   test_coverage:
     elisp: "excellent (165 tests, 100% passing)"
-    common_lisp: "none (0 automated tests)"
+    common_lisp: "good (64 filesystem tests, 100% passing)"
   documentation_freshness: "high (most updated within 30 days)"
   commit_discipline: "exemplary (root cause analysis)"
 

@@ -1,0 +1,178 @@
+feature:
+  name: file-system-tools
+  version: 1.1.0
+  status: stable
+  implementation_status: partial  # 6 of 10 tools implemented
+  confidence: 0.95  # Implemented and tested
+  description: |
+    File system manipulation tools enabling Agent-Q to navigate directories,
+    inspect files, search for files, and make targeted edits within project boundaries.
+    Implements Phase 1 (core navigation), Phase 2 (advanced navigation), and
+    Phase 3 (editing) with comprehensive security validation.
+
+  implemented_contracts: 6
+  planned_contracts: 4
+  test_count: 64
+  test_pass_rate: 100%
+
+depends_on:
+  core: true
+  features:
+    - tool-system    # Uses tool-protocol for registration
+    - diff-approval  # Leverages existing diff UI for dangerous operations
+
+research:
+  source: "canon/research/2026-01-20-file-system-tools.research.md"
+  references:
+    - "Claude str_replace_based_edit_tool (Anthropic API)"
+    - "MCP Filesystem Server (Model Context Protocol)"
+    - "Aider edit formats (multi-format flexibility)"
+
+contracts:
+  # ═══ IMPLEMENTED (Stable) ═══
+  - name: list_directory
+    status: stable
+    version: 1.0.0
+    safety_level: safe
+    impl: "src/tools/filesystem.lisp:65-105"
+    tests: 4
+  - name: get_file_info
+    status: stable
+    version: 1.0.0
+    safety_level: safe
+    impl: "src/tools/filesystem.lisp:111-155"
+    tests: 4
+  - name: get_project_root
+    status: stable
+    version: 1.0.0
+    safety_level: safe
+    impl: "src/tools/filesystem.lisp:163-192"
+    tests: 6
+  - name: edit_file
+    status: stable
+    version: 1.0.0
+    safety_level: moderate
+    impl: "src/tools/filesystem.lisp:254-305"
+    tests: 8
+    notes: "str_replace style with exact matching; includes count-substring helper"
+
+  - name: directory_tree
+    status: stable
+    version: 1.0.0
+    safety_level: safe
+    impl: "src/tools/filesystem.lisp:289-322"
+    tests: 10
+    notes: "Recursive tree with exclusion patterns; 3 helper functions (build/format/matches)"
+  - name: search_files
+    status: stable
+    version: 1.0.0
+    safety_level: safe
+    impl: "src/tools/filesystem.lisp:421-458"
+    tests: 12
+    notes: "Glob-based search with *, **, ? support; 2 helper functions (glob-matches-p, search-recursively)"
+
+  # ═══ PLANNED (Not Implemented) ═══
+  - name: insert_at_line
+    status: planned
+    safety_level: moderate
+    priority: low
+  - name: create_file
+    status: planned
+    safety_level: dangerous
+    priority: medium
+  - name: move_file
+    status: planned
+    safety_level: dangerous
+    priority: low
+  - name: delete_file
+    status: planned
+    safety_level: dangerous
+    priority: low
+
+properties:
+  - name: path-safety
+    status: stable
+    version: 1.0.0
+    confidence: 1.00
+    enforcement: "resolve-project-path (src/config.lisp)"
+    tests: 4
+
+scenarios:
+  - name: navigate-project-structure
+    status: covered
+    tools: ["list_directory", "get_file_info", "get_project_root"]
+  - name: targeted-code-edit
+    status: covered
+    tools: ["edit_file"]
+  - name: search-and-navigate
+    status: covered
+    tools: ["directory_tree", "search_files"]
+    notes: "Find files by pattern, visualize project structure"
+  - name: refactor-across-files
+    status: covered
+    tools: ["directory_tree", "search_files", "edit_file"]
+    notes: "Locate relevant files, then apply targeted edits"
+  - name: create-new-file
+    status: planned
+    tools: ["create_file"]
+
+implementation_phases:
+  phase1_core:
+    description: "Essential directory and file info tools"
+    status: complete
+    completed: "2026-01-20"
+    tools:
+      - list_directory
+      - get_file_info
+      - get_project_root
+    priority: high
+
+  phase2_navigation:
+    description: "Advanced navigation and search"
+    status: complete
+    completed: "2026-01-21"
+    tools:
+      - directory_tree
+      - search_files
+    priority: medium
+    notes: "Glob patterns support *, **, ? for flexible file searching"
+
+  phase3_editing:
+    description: "Targeted editing capabilities"
+    status: complete
+    completed: "2026-01-20"
+    tools:
+      - edit_file (str_replace)
+    priority: high
+    notes: "insert_at_line deferred to future phase"
+
+  phase4_lifecycle:
+    description: "File creation and management"
+    status: planned
+    tools:
+      - create_file
+      - move_file
+      - delete_file
+      - insert_at_line (moved from phase3)
+    priority: medium
+
+notes: |
+  This feature extends the tool-system with comprehensive filesystem
+  capabilities. Key design decisions:
+
+  1. Project Root Boundary: All operations bounded by project root
+     for safety (prevents accidental access to system files).
+
+  2. str_replace Editing: Following Claude API pattern - exact string
+     matching prevents ambiguous edits.
+
+  3. Automatic Diff Generation: Cautious edits auto-generate diffs
+     and can fall back to propose_file_edit for approval.
+
+  4. Emacs Integration (DR-007): Tools delegate to Emacs via eval-in-emacs,
+     leveraging Emacs' file handling and undo system. Provides security
+     isolation and consistency.
+
+  5. Glob Pattern Limitations (DR-008): Support *, **, ? only (not
+     character classes or brace expansion). Covers 95% of use cases
+     while maintaining simplicity and predictability.
