@@ -1,0 +1,88 @@
+infrastructure:
+  version: 0.1.0
+  created_with: canon-bootstrap@0.1.0
+  last_migrated: null
+
+tracking:
+  created: 2026-01-20T12:36:51Z
+  last_check: 2026-01-20T12:36:51Z
+  last_modified: 2026-01-20T14:00:00Z
+
+checkpoints:
+  - skill: canon-initiate
+    state_file: .canon-initiation/initiation-state.yaml
+    status: complete
+    last_activity: 2026-01-17T13:00:00Z
+    phase: reconciliation (all 7 passes complete)
+
+changelog:
+  - date: 2026-01-20
+    type: features-completed
+    summary: "Completed 3 high-confidence feature specifications (Phases 2-3)"
+    skill: manual
+    details: "Extended diff-approval (6 scenarios), created chat-interface and context-completion full specs"
+    features:
+      - diff-approval: "6 scenarios added (propose, accept-all, selective, reject, toggle, verification)"
+      - chat-interface: "Full spec: feature.yaml + contracts/properties/scenarios (36 tests documented)"
+      - context-completion: "Full spec: @-mention system (99 tests, most comprehensive)"
+    artifacts:
+      - features/diff-approval/scenarios/*.md (6 files)
+      - features/chat-interface/feature.yaml
+      - features/chat-interface/contracts/dual-region-layout.md
+      - features/chat-interface/properties/streaming-continuity.md
+      - features/chat-interface/scenarios/user-sends-message.md
+      - features/context-completion/feature.yaml
+      - features/context-completion/contracts/pill-protocol.md
+      - features/context-completion/properties/50kb-limit.md
+      - features/context-completion/scenarios/user-attaches-file.md
+
+  - date: 2026-01-20
+    type: feature-specified
+    summary: "Completed tool-system feature specification (Phase 2)"
+    skill: manual
+    details: "Created comprehensive spec: feature.yaml, 3 contracts, 3 properties, 3 scenarios. Documents 18 tools across 4 categories."
+    artifacts:
+      - features/tool-system/feature.yaml
+      - features/tool-system/contracts/tool-protocol.md
+      - features/tool-system/contracts/tool-registry.md
+      - features/tool-system/contracts/tool-execution.md
+      - features/tool-system/properties/safety-enforcement.md
+      - features/tool-system/properties/tool-name-uniqueness.md
+      - features/tool-system/properties/error-recovery.md
+      - features/tool-system/scenarios/safe-tool-execution.md
+      - features/tool-system/scenarios/dangerous-tool-approval.md
+      - features/tool-system/scenarios/tool-error-retry.md
+
+  - date: 2026-01-20
+    type: decisions-added
+    summary: "Formalized ADRs 0002-0005 from recovered rationale"
+    skill: manual
+    details: "Created 4 ADRs: streaming-tool-fallback, elisp-first-testing, fail-open-cost-estimation, phased-chat-development"
+    artifacts:
+      - core/decisions/0002-streaming-tool-fallback.md
+      - core/decisions/0003-elisp-first-testing.md
+      - core/decisions/0004-fail-open-cost-estimation.md
+      - core/decisions/0005-phased-chat-development.md
+
+  - date: 2026-01-20
+    type: canon-check
+    summary: "Health check performed - No blocking issues found"
+    skill: canon-check
+    details: "Initiation complete, AUTO metadata fix applied"
+
+  - date: 2026-01-17
+    type: canon-created
+    summary: "Canon extracted from codebase via 7-pass triangulation"
+    skill: canon-initiate
+    details: "193 artifacts analyzed, 0.87 average confidence, 74% convergence"
+
+issues_history:
+  - date: 2026-01-20
+    check_id: check-001
+    issues_found: 1
+    issues_fixed: 1
+    plan_file: ".canon-meta.yaml created"
+    category: "infrastructure"
+    severity: "low"
+    description: "Missing .canon-meta.yaml metadata file"
+    fix_applied: "AUTO - Created from canon-bootstrap template"

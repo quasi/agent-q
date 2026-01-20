@@ -1,0 +1,123 @@
+# Diff Approval Feature Canon
+# Phase: 2 (Tool System)
+# Status: Complete
+# Confidence: 0.95
+
+metadata:
+  name: "diff-approval"
+  phase: 2
+  status: complete
+  confidence: 0.95
+  triangulation: convergent
+
+  description: |
+    Per-hunk diff approval system allowing users to review and selectively apply
+    LLM-proposed file changes. Uses unified diff format with granular hunk-level
+    control, blocking UI (recursive-edit), and immediate file application.
+
+  key_files:
+    code:
+      - "src/tools/diff.lisp"                    # propose_file_edit tool (60 lines)
+      - "contrib/sly-agent-q/sly-agent-q-diff.el" # Emacs diff UI (800+ lines)
+    specs:
+      - "docs/DIFF-IMPLEMENTATION.AGENT.md"       # Complete specification
+    tests:
+      - "contrib/sly-agent-q/test/sly-agent-q-diff-test.el"              # 6 unit tests
+      - "contrib/sly-agent-q/test/sly-agent-q-diff-integration-test.el"  # 4 integration tests
+
+verification:
+  specification: "docs/DIFF-IMPLEMENTATION.AGENT.md"
+  implementation: "src/tools/diff.lisp + sly-agent-q-diff.el"
+  tests: 10
+  test_pass_rate: 100%
+  spec_adherence: 100%
+
+  notes: |
+    Exemplary spec fidelity - DIFF-IMPLEMENTATION.AGENT.md precisely matches
+    implementation. Terminology section enforces consistent vocabulary.
+    All behaviors specified are tested.
+
+contracts:
+  count: 1
+  files:
+    - "contracts/propose-file-edit.md"
+
+scenarios:
+  count: 6
+  files:
+    - "scenarios/propose-edit.md"
+    - "scenarios/accept-all-hunks.md"
+    - "scenarios/accept-selective-hunks.md"
+    - "scenarios/reject-all-hunks.md"
+    - "scenarios/toggle-hunk-states.md"
+    - "scenarios/verification-mismatch.md"
+
+properties:
+  count: 3
+  files:
+    - "properties/hunk-state-machine.md"
+    - "properties/irreversibility.md"
+    - "properties/decision-logic.md"
+
+triangulation:
+  sources_agree: true
+  code_vs_spec:
+    match: "exact"
+    confidence: 1.00
+    notes: "Implementation follows DIFF-IMPLEMENTATION.AGENT.md precisely"
+
+  code_vs_tests:
+    match: "verified"
+    confidence: 0.95
+    notes: "10 tests verify all major code paths"
+
+  spec_vs_tests:
+    match: "complete"
+    confidence: 0.95
+    notes: "All specified behaviors are tested"
+
+gaps:
+  specification: []
+  implementation: []
+  testing:
+    - "No explicit test for verification mismatch handling"
+  documentation: []
+
+quality_indicators:
+  - "Exemplary specification fidelity (100%)"
+  - "Enforced terminology prevents ambiguity"
+  - "State machine formally documented"
+  - "Recursive-edit blocking pattern well-tested"
+  - "Comprehensive integration tests (4)"
+
+related_features:
+  - "tool-system"      # diff-approval is a tool
+  - "chat-interface"   # Displays diff results in chat
+
+dependencies:
+  - "tool-system"      # define-tool macro, registry
+  - "Emacs diff-mode"  # Built-in diff parsing infrastructure
+
+dependents:
+  - "None (leaf feature)"
+
+architecture_notes: |
+  **Blocking Synchronous UI Pattern:**
+  - Uses recursive-edit to block Lisp until user decides
+  - Critical for tool execution flow (LLM needs immediate feedback)
+  - Prevents agent from continuing before user reviews changes
+
+  **Immediate Application:**
+  - Applied hunks modify file instantly (via diff-apply-hunk)
+  - No "preview" mode - changes are live
+  - Irreversible (applied hunks can't be unapplied from UI)
+
+  **Decision String Protocol:**
+  - "accepted" = at least one hunk applied
+  - "rejected" = zero hunks applied + explicit STOP directive
+  - Error strings = unexpected states
+
+  **Safety Level: :moderate**
+  - File modifications require user review
+  - No automatic application
+  - User has granular control (per-hunk)

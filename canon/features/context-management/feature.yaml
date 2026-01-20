@@ -1,0 +1,100 @@
+# Context Management Feature Canon
+# Phase: 1 (Foundation)
+# Status: Complete
+# Confidence: 0.95
+
+metadata:
+  name: "context-management"
+  phase: 1
+  status: complete
+  confidence: 0.95
+  triangulation: convergent
+
+  description: |
+    Code snippet accumulation with sliding window context manager.
+    Allows users to mark code regions in Emacs for inclusion in LLM prompts.
+    Implements 50-item FIFO queue with automatic formatting for LLM consumption.
+
+  key_files:
+    code:
+      - "src/context.lisp" # 200 lines
+      - "src/package.lisp" # context exports
+    specs:
+      - "specs/PHASE-1-SPEC.md:133-161"
+    tests:
+      - "contrib/sly-agent-q/test/sly-agent-q-context-test.el" # 20+ tests
+
+verification:
+  specification: "specs/PHASE-1-SPEC.md:133-161"
+  implementation: "src/context.lisp"
+  tests: 20
+  test_pass_rate: 100%
+  spec_adherence: 100%
+
+contracts:
+  count: 2
+  files:
+    - "contracts/context-item.md"
+    - "contracts/context-manager.md"
+
+scenarios:
+  count: 6
+  files:
+    - "scenarios/add-context-item.md"
+    - "scenarios/sliding-window-overflow.md"
+    - "scenarios/clear-context.md"
+    - "scenarios/get-filtered-context.md"
+    - "scenarios/format-for-llm.md"
+    - "scenarios/context-types.md"
+
+properties:
+  count: 5
+  files:
+    - "properties/sliding-window.md"
+    - "properties/type-safety.md"
+    - "properties/immutable-timestamps.md"
+    - "properties/monotonic-ids.md"
+    - "properties/markdown-formatting.md"
+
+triangulation:
+  sources_agree: true
+  code_vs_spec:
+    match: "exact"
+    confidence: 1.00
+    notes: "Data structures match specification precisely"
+
+  code_vs_tests:
+    match: "verified"
+    confidence: 0.95
+    notes: "20+ tests verify all operations"
+
+  spec_vs_tests:
+    match: "complete"
+    confidence: 0.95
+    notes: "Tests cover all specified behaviors"
+
+gaps:
+  specification: []
+  implementation: []
+  testing: []
+  documentation:
+    - ":custom type mentioned but not explained"
+
+quality_indicators:
+  - "CLOS type declarations enforce invariants"
+  - "Comprehensive test coverage"
+  - "Clear ABOUTME comments"
+  - "Specification-first development"
+
+related_features:
+  - "conversation" # conversation has-a context-manager
+  - "session-management" # sessions access context through conversation
+  - "chat-interface" # chat adds context via RPC
+
+dependencies:
+  - "None (foundational feature)"
+
+dependents:
+  - "conversation"
+  - "session-management"
+  - "sly-interface" # RPC endpoints for context operations

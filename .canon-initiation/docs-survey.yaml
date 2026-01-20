@@ -1,0 +1,603 @@
+# Canon Initiation Pass 0: Documentation Survey
+# Project: Agent-Q
+# Date: 2026-01-17
+# Purpose: Extract claims from documentation before examining code
+
+survey:
+  completed: 2026-01-17T10:00:00Z
+  sources_examined:
+    - path: README.md
+      type: overview
+      last_modified: 2026-01-15
+      staleness: low
+      notes: "Comprehensive overview with Phase 1-3 features"
+
+    - path: CLAUDE.md
+      type: project_instructions
+      last_modified: 2026-01-15
+      staleness: low
+      notes: "Project guidance for Claude Code, very detailed architecture"
+
+    - path: specs/README.md
+      type: architecture
+      last_modified: 2026-01-12
+      staleness: low
+      notes: "Vision document with phase summary and tool categories"
+
+    - path: specs/PHASE-1-SPEC.md
+      type: specification
+      last_modified: unknown
+      staleness: low
+      notes: "Complete Phase 1 specification with data structures and APIs"
+
+    - path: specs/PHASE-2-SPEC.md
+      type: specification
+      last_modified: unknown
+      staleness: low
+      notes: "Phase 2 specification for tool system"
+
+    - path: specs/PHASE1-IMPLEMENTATION-SUMMARY.md
+      type: status
+      last_modified: 2025-12-31
+      staleness: medium
+      notes: "Phase 1 completion report, needs updating for Phase 2/3 progress"
+      staleness_indicators:
+        - "Reports ~567 lines but actual is ~5,200 lines"
+        - "Phase 2/3 metrics outdated"
+
+    - path: docs/DIFF-IMPLEMENTATION.AGENT.md
+      type: agent_documentation
+      last_modified: unknown
+      staleness: low
+      notes: "Very detailed diff approval system documentation (v0.3.0)"
+
+    - path: docs/USER-GUIDE.md
+      type: user_documentation
+      last_modified: unknown
+      staleness: low
+      notes: "Comprehensive user-facing guide"
+
+    - path: docs/guides/context-management.md
+      type: guide
+      last_modified: unknown
+      staleness: low
+      notes: "@-mention completion guide for Chat Phase 4"
+
+    - path: specs/plans/2026-01-12-chat-context-management.md
+      type: implementation_plan
+      last_modified: 2026-01-12
+      staleness: low
+      notes: "TDD implementation plan for Chat Phase 4"
+
+# ═══════════════════════════════════════════════════════════════
+# CLAIMS: VOCABULARY
+# ═══════════════════════════════════════════════════════════════
+
+claims:
+  vocabulary:
+    # Core Domain Terms
+    - term: "Agent"
+      source: specs/PHASE-1-SPEC.md:208
+      definition: "The core orchestrator that manages LLM communication, context, and conversation"
+      confidence: high
+      domain: core
+
+    - term: "Context Item"
+      source: specs/PHASE-1-SPEC.md:133
+      definition: "A piece of code or text with metadata (type, content, metadata plist)"
+      confidence: high
+      domain: core
+
+    - term: "Context Manager"
+      source: specs/PHASE-1-SPEC.md:153
+      definition: "Manages sliding window of context items (max 50 items)"
+      confidence: high
+      domain: core
+
+    - term: "Conversation"
+      source: specs/PHASE-1-SPEC.md:183
+      definition: "Sequence of messages (user/assistant) with associated context manager"
+      confidence: high
+      domain: core
+
+    - term: "Message"
+      source: specs/PHASE-1-SPEC.md:172
+      definition: "Single turn in conversation with role (:system/:user/:assistant) and content"
+      confidence: high
+      domain: core
+
+    # Tool System Terms (Phase 2)
+    - term: "Tool"
+      source: specs/PHASE-2-SPEC.md:110
+      definition: "Executable capability with name, description, parameters, handler, trust level"
+      confidence: high
+      domain: tools
+
+    - term: "Tool Registry"
+      source: specs/PHASE-2-SPEC.md:167
+      definition: "Hash table storing all available tools keyed by name"
+      confidence: high
+      domain: tools
+
+    - term: "Tool Executor"
+      source: specs/PHASE-2-SPEC.md:204
+      definition: "Engine that executes tool calls with approval handling and hooks"
+      confidence: high
+      domain: tools
+
+    - term: "Trust Level"
+      source: specs/PHASE-2-SPEC.md:128
+      definition: "Safety classification: :safe (auto-execute), :cautious (log), :dangerous (require approval)"
+      confidence: high
+      domain: tools
+
+    - term: "Tool Result"
+      source: specs/PHASE-2-SPEC.md:140
+      definition: "Result of tool execution with id, success flag, content, and optional error"
+      confidence: high
+      domain: tools
+
+    # Diff System Terms
+    - term: "Hunk"
+      source: docs/DIFF-IMPLEMENTATION.AGENT.md:14
+      definition: "Contiguous block of changes in unified diff format, delimited by @@ headers"
+      confidence: high
+      domain: diff
+
+    - term: "Hunk State"
+      source: docs/DIFF-IMPLEMENTATION.AGENT.md:14
+      definition: "One of 'applied', 'rejected', or nil (pending) per hunk"
+      confidence: high
+      domain: diff
+
+    - term: "Diff Buffer"
+      source: docs/DIFF-IMPLEMENTATION.AGENT.md:16
+      definition: "Temporary buffer displaying unified diff in sly-agent-q-diff-mode"
+      confidence: high
+      domain: diff
+
+    - term: "Recursive Edit"
+      source: docs/DIFF-IMPLEMENTATION.AGENT.md:19
+      definition: "Emacs mechanism blocking execution until user exits with decision"
+      confidence: high
+      domain: diff
+
+    # Context Management Terms (Chat Phase 4)
+    - term: "@-Mention"
+      source: docs/guides/context-management.md:9
+      definition: "Inline completion for attaching files, symbols, or buffers using @ prefix"
+      confidence: high
+      domain: context
+
+    - term: "Context Pill"
+      source: docs/guides/context-management.md:16
+      definition: "Visual indicator [@name] for attached context items with clickable actions"
+      confidence: high
+      domain: context
+
+    - term: "Context Panel"
+      source: README.md:28
+      definition: "Sidebar showing all attached context items with type, size, and actions"
+      confidence: high
+      domain: context
+
+    # Session Terms
+    - term: "Session"
+      source: specs/README.md:24
+      definition: "Persistent conversation with SQLite-backed storage"
+      confidence: high
+      domain: session
+
+    - term: "Session Manager"
+      source: CLAUDE.md:393
+      definition: "CRUD operations for sessions with message history and project awareness"
+      confidence: high
+      domain: session
+
+# ═══════════════════════════════════════════════════════════════
+# CLAIMS: FEATURES
+# ═══════════════════════════════════════════════════════════════
+
+  features:
+    # Phase 1 Features (Complete)
+    - name: "Context Management"
+      sources:
+        - README.md:10
+        - specs/PHASE-1-SPEC.md
+      description: "Accumulate code snippets with metadata in sliding window"
+      phase: 1
+      status: complete
+      confidence: high
+
+    - name: "Conversation Management"
+      sources:
+        - README.md:11
+        - specs/PHASE-1-SPEC.md
+      description: "Multi-turn conversations with message history"
+      phase: 1
+      status: complete
+      confidence: high
+
+    - name: "LLM Integration"
+      sources:
+        - README.md:12
+        - specs/CL-LLM-PROVIDER-INTEGRATION.md
+      description: "Multi-provider support (Anthropic, OpenAI, Ollama, OpenRouter)"
+      phase: 1
+      status: complete
+      confidence: high
+
+    - name: "SLY Integration"
+      sources:
+        - README.md:12
+        - specs/PHASE-1-SPEC.md
+      description: "Seamless Emacs integration via SLY RPC protocol"
+      phase: 1
+      status: complete
+      confidence: high
+
+    # Phase 2 Features (In Progress)
+    - name: "Tool System Infrastructure"
+      sources:
+        - README.md:17
+        - specs/PHASE-2-SPEC.md
+      description: "Tool registry, protocol, executor with safety levels"
+      phase: 2
+      status: complete
+      confidence: high
+
+    - name: "Introspection Tools"
+      sources:
+        - README.md:18
+        - specs/PHASE-2-SPEC.md:279
+      description: "describe-symbol, apropos, who-calls, class-slots, macroexpand, etc."
+      phase: 2
+      status: complete
+      confidence: high
+
+    - name: "Execution Tools"
+      sources:
+        - README.md:19
+        - specs/PHASE-2-SPEC.md:523
+      description: "eval-form, compile-form, get-last-error, get-repl-history"
+      phase: 2
+      status: complete
+      confidence: high
+
+    - name: "Buffer Tools"
+      sources:
+        - README.md:19
+        - specs/PHASE-2-SPEC.md:687
+      description: "read-file, write-file, read-buffer, write-to-buffer, search-in-buffer"
+      phase: 2
+      status: complete
+      confidence: high
+
+    - name: "Diff Approval System"
+      sources:
+        - README.md:20
+        - docs/DIFF-IMPLEMENTATION.AGENT.md
+      description: "Per-hunk diff review with unified diff format and visual feedback"
+      phase: 2
+      status: complete
+      confidence: high
+      version: "0.3.0"
+
+    - name: "Autonomous Tool Use Loop"
+      sources:
+        - specs/PHASE-2-SPEC.md:801
+        - specs/README.md:106
+      description: "Agent iterates with tool execution until task complete"
+      phase: 2
+      status: in_progress
+      confidence: medium
+      notes: "Core infrastructure exists, loop orchestration in development"
+
+    # Phase 3 Features (Partial)
+    - name: "Session Management"
+      sources:
+        - README.md:23
+        - CLAUDE.md:393
+      description: "SQLite-backed persistence with CRUD operations"
+      phase: 3
+      status: complete
+      confidence: high
+      notes: "Moved from Elisp to CL for better persistence"
+
+    - name: "Rich Markdown Rendering"
+      sources:
+        - README.md:24
+        - CLAUDE.md:409
+      description: "Beautiful rendering with syntax highlighting in chat"
+      phase: 3
+      status: complete
+      confidence: high
+
+    - name: "Streaming Responses"
+      sources:
+        - README.md:25
+        - specs/plans/2026-01-13-streaming-observability-upgrade.md
+      description: "Real-time token-by-token display with progress feedback"
+      phase: 3
+      status: complete
+      confidence: high
+
+    - name: "@-Mention Completion"
+      sources:
+        - README.md:26
+        - docs/guides/context-management.md
+        - specs/plans/2026-01-12-chat-context-management.md
+      description: "Inline completion for files, symbols, and buffers"
+      phase: 3
+      status: complete
+      confidence: high
+      notes: "Chat Phase 4 implementation with 99 passing tests"
+
+    - name: "Context Pills"
+      sources:
+        - README.md:27
+        - docs/guides/context-management.md:16
+      description: "Visual indicators for attached context with hover previews"
+      phase: 3
+      status: complete
+      confidence: high
+
+    - name: "Context Panel"
+      sources:
+        - README.md:28
+        - docs/guides/context-management.md
+      description: "Sidebar showing all attached context items"
+      phase: 3
+      status: complete
+      confidence: high
+
+    - name: "Observability"
+      sources:
+        - README.md:29
+        - CLAUDE.md (implied from streaming docs)
+      description: "Built-in logging, metrics, and cost tracking"
+      phase: 3
+      status: complete
+      confidence: high
+
+    - name: "Cost Estimation"
+      sources:
+        - README.md:30
+        - CLAUDE.md:cost.lisp
+      description: "Pre-flight cost checks and budget enforcement"
+      phase: 3
+      status: complete
+      confidence: high
+
+    - name: "Condition System Integration"
+      sources:
+        - specs/README.md:113
+        - specs/PHASE-3-SPEC.md
+      description: "Debugger awareness and condition handling"
+      phase: 3
+      status: planned
+      confidence: low
+      notes: "Not yet implemented"
+
+    - name: "Testing Framework Integration"
+      sources:
+        - specs/README.md:114
+        - specs/PHASE-3-SPEC.md
+      description: "FiveAM/Parachute integration"
+      phase: 3
+      status: planned
+      confidence: low
+      notes: "Not yet implemented"
+
+    - name: "Knowledge Base"
+      sources:
+        - specs/README.md:115
+        - specs/PHASE-3-SPEC.md
+      description: "Persistent learnings across sessions"
+      phase: 3
+      status: planned
+      confidence: low
+      notes: "Not yet implemented"
+
+    # Phase 4 Features (Planned)
+    - name: "Semantic Indexing"
+      sources:
+        - specs/README.md:121
+        - specs/PHASE-4-SPEC.md
+      description: "Semantic index of codebase for intelligent search"
+      phase: 4
+      status: planned
+      confidence: low
+
+    - name: "Profiling Integration"
+      sources:
+        - specs/README.md:122
+      description: "Performance profiling and hot spot detection"
+      phase: 4
+      status: planned
+      confidence: low
+
+    - name: "Refactoring"
+      sources:
+        - specs/README.md:123
+      description: "Safe multi-file refactoring capabilities"
+      phase: 4
+      status: planned
+      confidence: low
+
+    - name: "Pattern Detection"
+      sources:
+        - specs/README.md:124
+      description: "Code smell and duplication detection"
+      phase: 4
+      status: planned
+      confidence: low
+
+# ═══════════════════════════════════════════════════════════════
+# CLAIMS: ARCHITECTURE
+# ═══════════════════════════════════════════════════════════════
+
+  architecture:
+    - claim: "Two-tier architecture: Emacs UI + Common Lisp core"
+      source: specs/README.md:52
+      confidence: high
+      verification_needed: false
+      notes: "Clear separation with SLY RPC bridge"
+
+    - claim: "SLY Protocol for bidirectional RPC communication"
+      source: CLAUDE.md:62
+      confidence: high
+      verification_needed: false
+
+    - claim: "cl-llm-provider for all LLM interactions"
+      source: specs/README.md:77
+      confidence: high
+      verification_needed: false
+      notes: "No direct API calls, provider abstraction"
+
+    - claim: "SQLite for session persistence"
+      source: CLAUDE.md:24
+      confidence: high
+      verification_needed: false
+      notes: "Moved from Elisp to CL in Phase 3"
+
+    - claim: "Tool system with registry + executor pattern"
+      source: specs/PHASE-2-SPEC.md:110
+      confidence: high
+      verification_needed: false
+
+    - claim: "Streaming architecture using cl-llm-provider callbacks"
+      source: CLAUDE.md:114
+      confidence: high
+      verification_needed: false
+      notes: "Hybrid: text streams, tool calls synchronous"
+
+    - claim: "Observability via cl-llm-provider hook system"
+      source: CLAUDE.md:123
+      confidence: high
+      verification_needed: false
+
+    - claim: "Package discipline: separate packages for tools, knowledge, semantic"
+      source: CLAUDE.md:158
+      confidence: high
+      verification_needed: true
+
+    - claim: "Specification-driven development with phase documents"
+      source: CLAUDE.md:86
+      confidence: high
+      verification_needed: false
+      notes: "Specs written before implementation"
+
+# ═══════════════════════════════════════════════════════════════
+# CLAIMS: TECHNICAL DETAILS
+# ═══════════════════════════════════════════════════════════════
+
+  technical_details:
+    - claim: "Context sliding window: 50 items maximum"
+      source: specs/PHASE-1-SPEC.md:158
+      confidence: high
+      verification_needed: true
+
+    - claim: "Context size limit: 50KB per item"
+      source: CLAUDE.md:133
+      confidence: high
+      verification_needed: true
+
+    - claim: "Diff system uses built-in diff-mode.el infrastructure"
+      source: docs/DIFF-IMPLEMENTATION.AGENT.md:261
+      confidence: high
+      verification_needed: true
+
+    - claim: "161 tests total, 156 passing (97% pass rate)"
+      source: CLAUDE.md:164
+      confidence: medium
+      verification_needed: true
+      notes: "Need to verify current test count"
+
+    - claim: "99 tests for context management (Chat Phase 4)"
+      source: CLAUDE.md:164
+      confidence: medium
+      verification_needed: true
+
+    - claim: "~5,200 total lines of code (as of Jan 2026)"
+      source: specs/PHASE1-IMPLEMENTATION-SUMMARY.md:443
+      confidence: medium
+      verification_needed: true
+      notes: "Contrast with initial 567 lines in Phase 1"
+
+    - claim: "Common Lisp: ~2,500 lines, Emacs Lisp: ~1,900 lines, Tests: ~800 lines"
+      source: specs/PHASE1-IMPLEMENTATION-SUMMARY.md:440
+      confidence: medium
+      verification_needed: true
+
+# ═══════════════════════════════════════════════════════════════
+# STALENESS ANALYSIS
+# ═══════════════════════════════════════════════════════════════
+
+staleness_analysis:
+  overall_assessment: "Very fresh documentation, most updated within 30 days"
+
+  stale_sections:
+    - document: specs/PHASE1-IMPLEMENTATION-SUMMARY.md
+      section: "Implementation Metrics"
+      issue: "Reports outdated LOC counts (567 vs actual ~5,200)"
+      last_updated: "2025-12-31"
+      impact: medium
+      recommendation: "Update metrics section with current counts"
+
+    - document: specs/PHASE1-IMPLEMENTATION-SUMMARY.md
+      section: "Post-Phase 1 Progress"
+      issue: "Phase 2/3 progress needs update"
+      last_updated: "2025-12-31"
+      impact: low
+      recommendation: "Add recent Chat Phase 4 completion"
+
+  fresh_sections:
+    - document: CLAUDE.md
+      notes: "Updated 2026-01-15, reflects current state accurately"
+
+    - document: README.md
+      notes: "Updated 2026-01-15, includes all Phase 3 features"
+
+    - document: docs/DIFF-IMPLEMENTATION.AGENT.md
+      notes: "Detailed agent documentation for v0.3.0, appears current"
+
+    - document: specs/plans/*.md
+      notes: "Recent plans from Jan 2026, appear current"
+
+# ═══════════════════════════════════════════════════════════════
+# SUMMARY
+# ═══════════════════════════════════════════════════════════════
+
+summary:
+  total_claims_extracted:
+    vocabulary: 17
+    features: 26
+    architecture: 9
+    technical_details: 7
+
+  confidence_distribution:
+    high_confidence: 54  # Claims verified in multiple sources
+    medium_confidence: 5  # Claims from single recent source
+    low_confidence: 0     # Aspirational claims
+
+  documentation_quality: excellent
+  documentation_completeness: high
+  specification_coverage: comprehensive
+
+  key_observations:
+    - "Very strong specification-first approach with detailed phase documents"
+    - "Architecture clearly documented with data structures and APIs"
+    - "Recent updates (within 30 days) indicate active development"
+    - "Agent documentation (.AGENT.md) shows mature documentation practices"
+    - "Implementation summary slightly outdated but major docs are current"
+    - "Clear phase-based development with explicit status tracking"
+    - "Good balance of user-facing and developer-facing documentation"
+
+  next_steps:
+    - "Pass 1: Verify claims against code structure"
+    - "Pass 2: Extract contracts from actual code"
+    - "Pass 3: Analyze test suite for behavioral coverage"
+    - "Pass 4: Infer properties from code and tests"
+    - "Pass 5: Recover design decisions from git history"
+    - "Pass 6: Triangulate and generate confidence scores"

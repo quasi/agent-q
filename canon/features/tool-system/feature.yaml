@@ -1,0 +1,254 @@
+# Tool System Feature
+# Extracted: 2026-01-20
+# Source: Multi-source triangulation (code + specs + tests)
+# Confidence: 0.85
+
+feature:
+  name: tool-system
+  version: 0.2.0
+  status: complete
+  confidence: 0.85
+  triangulation: convergent
+  phase: 2
+
+  description: |
+    Extensible tool registry system enabling the LLM to execute actions in the
+    running Lisp image. Tools are categorized by domain (introspection, execution,
+    buffer manipulation, diff workflow) and protected by safety levels (safe,
+    cautious, dangerous) to prevent unintended modifications.
+
+    The tool system provides 18 tools across 4 categories with automatic schema
+    generation for LLM provider integration and a protocol-based architecture
+    for easy extension.
+
+metadata:
+  primary_files:
+    - src/tools/registry.lisp
+    - src/tools/introspection.lisp
+    - src/tools/execution.lisp
+    - src/tools/buffer.lisp
+    - src/tools/diff.lisp
+    - src/tools/package.lisp
+
+  specification:
+    - specs/PHASE-2-SPEC.md
+    - canon/features/tool-system/
+
+  tests:
+    common_lisp: 0
+    emacs_lisp: 0
+    manual: "Extensive manual testing via REPL and integration"
+    coverage: "0% automated, high manual coverage"
+
+  dependencies:
+    internal:
+      - context-management  # Tools use context for results
+      - conversation        # Tool results added to conversation
+    external:
+      - cl-llm-provider     # Tool schema format
+      - closer-mop          # CLOS introspection tools
+      - slynk               # Optional: enhanced introspection
+
+inventory:
+  total_tools: 18
+  by_category:
+    introspection: 9
+    execution: 4
+    buffer: 4
+    diff: 1
+
+  by_safety_level:
+    safe: 13      # Read-only introspection
+    cautious: 3   # Execution with logging
+    dangerous: 2  # File writes, requires approval
+
+  tools:
+    # Introspection Tools (9)
+    - name: describe_symbol
+      category: introspection
+      safety: safe
+      description: "Get detailed information about a Lisp symbol"
+      source: src/tools/introspection.lisp:12
+
+    - name: apropos_search
+      category: introspection
+      safety: safe
+      description: "Search for symbols matching a pattern"
+      source: src/tools/introspection.lisp:39
+
+    - name: function_arglist
+      category: introspection
+      safety: safe
+      description: "Get argument list for a function"
+      source: src/tools/introspection.lisp:78
+
+    - name: who_calls
+      category: introspection
+      safety: safe
+      description: "Find all functions that call specified function (XREF)"
+      source: src/tools/introspection.lisp:126
+
+    - name: who_references
+      category: introspection
+      safety: safe
+      description: "Find all code that references a variable (XREF)"
+      source: src/tools/introspection.lisp:168
+
+    - name: list_package_symbols
+      category: introspection
+      safety: safe
+      description: "List all symbols from a package with types"
+      source: src/tools/introspection.lisp:210
+
+    - name: class_slots
+      category: introspection
+      safety: safe
+      description: "Get slot definitions for a CLOS class"
+      source: src/tools/introspection.lisp:251
+
+    - name: class_hierarchy
+      category: introspection
+      safety: safe
+      description: "Get superclasses/subclasses of a CLOS class"
+      source: src/tools/introspection.lisp:295
+
+    - name: macroexpand_form
+      category: introspection
+      safety: safe
+      description: "Expand macros in a Lisp form"
+      source: src/tools/introspection.lisp:335
+
+    # Execution Tools (4)
+    - name: eval_form
+      category: execution
+      safety: cautious
+      description: "Evaluate a Lisp form in the running image"
+      source: src/tools/execution.lisp
+
+    - name: compile_form
+      category: execution
+      safety: cautious
+      description: "Compile and load a Lisp form"
+      source: src/tools/execution.lisp
+
+    - name: get_last_error
+      category: execution
+      safety: safe
+      description: "Retrieve the last error from REPL history"
+      source: src/tools/execution.lisp
+
+    - name: get_repl_history
+      category: execution
+      safety: safe
+      description: "Get recent REPL evaluation history"
+      source: src/tools/execution.lisp
+
+    # Buffer Tools (4)
+    - name: read_file
+      category: buffer
+      safety: safe
+      description: "Read file contents from disk"
+      source: src/tools/buffer.lisp
+
+    - name: read_buffer
+      category: buffer
+      safety: safe
+      description: "Read Emacs buffer contents via SLY"
+      source: src/tools/buffer.lisp
+
+    - name: write_file
+      category: buffer
+      safety: dangerous
+      description: "Write content to a file (requires approval)"
+      source: src/tools/buffer.lisp
+
+    - name: search_in_buffer
+      category: buffer
+      safety: safe
+      description: "Search for pattern in buffer contents"
+      source: src/tools/buffer.lisp
+
+    # Diff Tools (1)
+    - name: propose_file_edit
+      category: diff
+      safety: dangerous
+      description: "Propose file modification with unified diff (requires approval)"
+      source: src/tools/diff.lisp
+      notes: "Integrates with diff approval workflow (Phase 2)"
+
+architecture:
+  components:
+    - name: "Tool Registry"
+      file: src/tools/registry.lisp
+      role: "Central hash table storing all registered tools"
+      key_functions:
+        - register-tool
+        - get-tool
+        - list-tools
+        - tools-to-schema
+
+    - name: "Tool Protocol"
+      file: src/tools/package.lisp
+      role: "define-tool macro and tool class definition"
+      pattern: "Each tool file uses (let ((tool (define-tool ...))) (register-tool ...))"
+
+    - name: "Tool Executor"
+      file: src/tools/registry.lisp
+      role: "Executes tool calls from LLM with safety enforcement"
+      features:
+        - Safety level checking
+        - Approval handler integration
+        - Error handling and formatting
+        - Hook system for observability
+
+    - name: "Category Modules"
+      pattern: "One file per category (introspection, execution, buffer, diff)"
+      isolation: "Each module registers its tools independently"
+
+  integration_points:
+    - component: "LLM Provider (cl-llm-provider)"
+      interface: "tools-to-schema() → JSON schema for tool definitions"
+      flow: "LLM requests tool call → Agent executes → Result formatted → Sent back to LLM"
+
+    - component: "Agent Loop (src/agent.lisp)"
+      interface: "execute-tool-call(tool-call) → tool-result"
+      flow: "LLM response contains tool calls → Loop over calls → Execute → Continue conversation"
+
+    - component: "Diff Approval (sly-agent-q-diff.el)"
+      interface: "propose_file_edit tool → Emacs UI → User approval → Apply or reject"
+      flow: "Tool execution paused pending user approval"
+
+spec_adherence:
+  phase_2_spec: "94% (18/19 tools implemented)"
+  missing_tools:
+    - "load-file tool mentioned in spec but not implemented"
+  divergences:
+    - "Safety levels: spec uses :trust-level, code uses :safety-level"
+    - "Tool naming: spec shows camelCase, impl uses snake_case"
+  convergences:
+    - "Tool protocol matches spec closely"
+    - "Registry design matches spec exactly"
+    - "Safety enforcement implemented as specified"
+    - "Hook system for observability present"
+
+quality_metrics:
+  code_quality: excellent
+  documentation_quality: good
+  test_coverage: poor (0 automated tests)
+  api_stability: stable (Phase 2 complete)
+  extensibility: excellent (protocol-based)
+
+known_gaps:
+  - "No automated tests for tool execution"
+  - "REPL history capacity undocumented"
+  - "Tool execution timing/performance metrics not tracked"
+  - "No tool usage analytics (which tools used how often)"
+  - "Approval handler callback not formally specified"
+
+future_enhancements:
+  - "Add tool execution metrics (timing, success rate)"
+  - "Implement tool usage analytics for optimization"
+  - "Add comprehensive test suite (FiveAM or Parachute)"
+  - "Document REPL history capacity limits"
+  - "Add tool versioning for API evolution"
+  - "Implement tool deprecation mechanism"

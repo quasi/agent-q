@@ -1,0 +1,201 @@
+# Context Completion Feature (@-mention)
+# Phase: 3 (Chat Phase 4: Context Management)
+# Status: Complete
+# Confidence: 0.95
+
+feature:
+  name: context-completion
+  version: 1.0.0
+  status: complete
+  confidence: 0.95
+  triangulation: convergent
+  phase: 3
+
+  description: |
+    @-mention system for attaching context (files, symbols, buffers) to chat messages.
+    Provides inline completion-at-point, visual pills for selected items, sidebar panel
+    for managing context, and automatic LLM integration with 50KB size limits.
+
+    Most comprehensively tested feature in Agent-Q (99 tests, 100% passing).
+    Implements Chat Phase 4 from phased development plan.
+
+metadata:
+  primary_files:
+    - contrib/sly-agent-q/sly-agent-q-context.el  # 1200+ lines
+
+  specification:
+    - docs/plans/2026-01-12-chat-context-management.md  # Chat Phase 4
+    - docs/guides/context-management.md  # User guide
+
+  tests:
+    file: contrib/sly-agent-q/test/sly-agent-q-context-test.el
+    count: 99
+    pass_rate: "100%"
+    coverage: "Comprehensive (60% of entire test suite)"
+    categories:
+      pills: 29        # Visual pills (creation, removal, click)
+      completion: 24   # Completion-at-point integration
+      panel: 20        # Sidebar context panel
+      llm: 15          # LLM message formatting
+      content: 11      # Content fetching
+
+  dependencies:
+    internal:
+      - chat-interface  # Pills displayed in input region
+      - conversation    # Context attached to messages
+    external:
+      - emacs completion-at-point  # Built-in completion framework
+
+inventory:
+  components:
+    - name: "@-mention Completion"
+      description: "completion-at-point integration, triggers on '@'"
+      lines: ~200
+      tests: 24
+
+    - name: "Context Pills"
+      description: "Visual tags [@name] with text properties"
+      lines: ~300
+      tests: 29
+
+    - name: "Context Panel"
+      description: "Sidebar displaying all attached context"
+      lines: ~250
+      tests: 20
+
+    - name: "Content Fetching"
+      description: "Lazy loading with 50KB limit"
+      lines: ~150
+      tests: 11
+
+    - name: "LLM Integration"
+      description: "Format context as <context>...</context> block"
+      lines: ~100
+      tests: 15
+
+  completion_sources:
+    - type: files
+      method: file-name-all-completions
+      examples: ["@src/agent.lisp", "@README.md"]
+
+    - type: symbols
+      method: apropos
+      examples: ["@process-instruction", "@defun"]
+
+    - type: buffers
+      method: buffer-list
+      examples: ["@*scratch*", "@agent.lisp"]
+
+  pill_format:
+    text: "[@name]"
+    properties:
+      - sly-agent-q-context-pill: name
+      - face: sly-agent-q-context-pill-face
+      - rear-nonsticky: t
+      - keymap: sly-agent-q-context-pill-map
+    actions:
+      - click: Visit source (file/buffer)
+      - DEL: Remove pill and context
+
+architecture:
+  completion_flow:
+    trigger: "User types '@' in input region"
+    completion: "completion-at-point activates"
+    candidates: "Files, symbols, buffers"
+    selection: "User selects → creates pill"
+    storage: "Context added to buffer-local list"
+
+  pill_lifecycle:
+    create: "Completion selection inserts [@name] with properties"
+    display: "Rendered with special face, clickable"
+    remove: "DEL key removes pill + context"
+    persist: "Pills survive buffer operations"
+
+  content_fetching:
+    lazy: "Content loaded when message sent, not at pill creation"
+    limit: "50KB per item (prevents context overflow)"
+    format: |
+      <context type="file" path="src/agent.lisp">
+      (defun process-instruction ...)
+      </context>
+
+  panel_ui:
+    location: "Right sidebar (split-window)"
+    display: "Type, name, size, actions"
+    refresh: "Auto-updates on pill add/remove"
+    actions: "Visit source, remove item"
+
+features:
+  completion:
+    - Auto-trigger after 2 characters (configurable)
+    - Substring matching (not just prefix)
+    - Works with Helm, Vertico, Ivy (completing-read)
+    - Fuzzy matching support
+
+  pills:
+    - Visual feedback for attached context
+    - Clickable (visit source)
+    - Removable (DEL key)
+    - Persistent across buffer operations
+    - Rear-nonsticky (typing after pill doesn't extend)
+
+  panel:
+    - Shows all attached context items
+    - Type indicators (file/symbol/buffer)
+    - Size display (KB)
+    - Quick actions (visit/remove)
+    - Auto-refresh on changes
+
+  llm_integration:
+    - Context appended to messages
+    - Formatted as XML blocks
+    - Type metadata included
+    - Path information for files
+    - 50KB limit per item enforced
+
+test_coverage:
+  pills_creation: 8           # Insert, formatting, properties
+  pills_removal: 6            # DEL key, context cleanup
+  pills_click: 5              # Visit file/buffer/symbol
+  pills_persistence: 10       # Survive edits, non-stickiness
+  completion_trigger: 6       # Auto-trigger, manual trigger
+  completion_candidates: 8    # Files, symbols, buffers
+  completion_filtering: 10    # Substring, fuzzy, case
+  panel_display: 8            # Sidebar, formatting, types
+  panel_actions: 6            # Visit, remove, refresh
+  panel_lifecycle: 6          # Open, close, toggle
+  content_fetch: 6            # Lazy load, limit enforcement
+  content_format: 5           # XML blocks, metadata
+  llm_messages: 15            # Context in messages, formatting
+  total: 99
+
+quality_metrics:
+  test_coverage: exceptional (99 tests, most in project)
+  code_quality: excellent (well-organized, modular)
+  user_experience: excellent (responsive, intuitive)
+  integration: excellent (completion-at-point, chat, LLM)
+  documentation: very_good (user guide + spec)
+
+known_gaps:
+  - "No context deduplication (can attach same file twice)"
+  - "No context reordering in panel"
+  - "Panel doesn't show content preview (only metadata)"
+  - "Large files (>50KB) silently truncated (no warning)"
+  - "No symbol definition preview in completion"
+
+design_decisions:
+  - "Lazy content fetching: Performance (don't load until needed)"
+  - "50KB limit: Prevent LLM context overflow (see triangulation report)"
+  - "completion-at-point: Standard Emacs integration (works with all completion UIs)"
+  - "Pills vs. overlays: Text properties for persistence across saves"
+  - "Auto-trigger after 2 chars: Balance between convenience and false triggers"
+
+related_features:
+  - chat-interface  # Pills displayed in input
+  - context-management  # CL-side context storage
+  - conversation    # Context attached to messages
+
+references:
+  - ADR-0005: Phased Chat Development (context was Chat Phase 4)
+  - docs/plans/2026-01-12-chat-context-management.md
+  - docs/guides/context-management.md

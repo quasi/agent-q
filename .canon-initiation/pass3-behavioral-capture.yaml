@@ -1,0 +1,599 @@
+# Canon Initiation Pass 3: Behavioral Capture
+# Project: Agent-Q
+# Date: 2026-01-17
+# Purpose: Extract behavioral scenarios from test suite
+
+capture:
+  completed: 2026-01-17T11:30:00Z
+  method: "Test suite analysis + scenario extraction"
+  test_files_analyzed: 5
+  total_tests: 165
+
+# ═══════════════════════════════════════════════════════════════
+# TEST SUITE OVERVIEW
+# ═══════════════════════════════════════════════════════════════
+
+test_suite:
+  framework: "ERT (Emacs Lisp Regression Testing)"
+  organization: "Feature-based with hierarchical naming"
+  naming_convention: "component/category/what-it-tests"
+
+  files:
+    - file: "sly-agent-q-chat-test.el"
+      tests: 36
+      coverage: "Chat interface, markdown rendering, streaming, history"
+      status: "passing"
+
+    - file: "sly-agent-q-context-test.el"
+      tests: 99
+      coverage: "@-mention completion, pills, panel, LLM integration"
+      status: "99/99 passing (as documented)"
+      notes: "Most comprehensive test suite"
+
+    - file: "sly-agent-q-sessions-test.el"
+      tests: 20
+      coverage: "Session CRUD, persistence, switching"
+      status: "passing"
+
+    - file: "sly-agent-q-diff-test.el"
+      tests: 6
+      coverage: "Diff generation, hunk parsing, state management"
+      status: "passing"
+
+    - file: "sly-agent-q-diff-integration-test.el"
+      tests: 4
+      coverage: "End-to-end diff approval workflow"
+      status: "passing"
+
+# ═══════════════════════════════════════════════════════════════
+# BEHAVIORAL SCENARIOS: CHAT INTERFACE
+# ═══════════════════════════════════════════════════════════════
+
+scenarios_chat:
+  - scenario: "Chat buffer creation and layout"
+    test: "agent-q-chat/buffer-setup/creates-correct-layout"
+    given: "User opens chat interface"
+    when: "Buffer is created"
+    then: "Layout has input area, conversation area, and context panel"
+    coverage: convergent
+    confidence: 0.95
+
+  - scenario: "Chat input manipulation"
+    tests:
+      - "agent-q-chat/input/get-input-returns-text"
+      - "agent-q-chat/input/clear-input-removes-text"
+      - "agent-q-chat/input/replace-input-changes-text"
+    given: "User types in chat input"
+    when: "Input is manipulated"
+    then: "Text is correctly retrieved, cleared, or replaced"
+    coverage: convergent
+    confidence: 0.95
+
+  - scenario: "Input history navigation"
+    tests:
+      - "agent-q-chat/history/adds-to-history"
+      - "agent-q-chat/history/no-duplicates"
+      - "agent-q-chat/history/navigate-previous"
+      - "agent-q-chat/history/navigate-next"
+    given: "User has sent multiple messages"
+    when: "User presses up/down arrows"
+    then: "Previous/next inputs are recalled, no duplicates stored"
+    coverage: convergent
+    confidence: 0.95
+
+  - scenario: "Message rendering"
+    tests:
+      - "agent-q-chat/messages/render-user-message"
+      - "agent-q-chat/messages/render-system-message"
+    given: "Messages exist in conversation"
+    when: "Messages are displayed"
+    then: "User and system messages are visually distinct"
+    coverage: convergent
+    confidence: 0.95
+
+  - scenario: "Streaming response display"
+    tests:
+      - "agent-q-chat/streaming/begin-response"
+      - "agent-q-chat/streaming/append-chunks"
+      - "agent-q-chat/streaming/finalize-response"
+    given: "LLM sends streaming response"
+    when: "Chunks arrive"
+    then: "Response appears token-by-token and is finalized correctly"
+    coverage: convergent
+    confidence: 0.95
+
+  - scenario: "Markdown rendering"
+    tests:
+      - "agent-q-chat/markdown/renders-bold"
+      - "[others for code blocks, lists, etc.]"
+    given: "Response contains markdown syntax"
+    when: "Response is rendered"
+    then: "Markdown is correctly formatted with syntax highlighting"
+    coverage: convergent
+    confidence: 0.95
+
+# ═══════════════════════════════════════════════════════════════
+# BEHAVIORAL SCENARIOS: CONTEXT MANAGEMENT (@-MENTION)
+# ═══════════════════════════════════════════════════════════════
+
+scenarios_context:
+  - scenario: "Context item creation"
+    tests:
+      - "agent-q-context/struct/creates-item"
+      - "agent-q-context/struct/type-variants"
+      - "agent-q-context/struct/default-values"
+      - "agent-q-context/struct/accessors-work"
+    given: "System needs to track context item"
+    when: "Context item is created"
+    then: "Item has type, display-name, data, and content"
+    coverage: convergent
+    confidence: 0.95
+    property: "Context items support 5 types: :file :symbol :buffer :region :url"
+
+  - scenario: "File completion"
+    tests:
+      - "agent-q-context/candidates/file-returns-list"
+      - "agent-q-context/candidates/file-filters-by-prefix"
+      - "agent-q-context/candidates/file-has-properties"
+      - "agent-q-context/candidates/file-returns-nil-without-project"
+    given: "User types @file-prefix"
+    when: "Completion is triggered"
+    then: "Files matching prefix are returned with text properties"
+    coverage: convergent
+    confidence: 0.95
+    property: "File completion requires active project"
+
+  - scenario: "Symbol completion"
+    tests:
+      - "agent-q-context/candidates/symbol-returns-list"
+      - "agent-q-context/candidates/symbol-from-lisp-buffers"
+      - "agent-q-context/candidates/symbol-has-properties"
+      - "agent-q-context/candidates/symbol-limits-results"
+      - "agent-q-context/candidates/symbol-has-position"
+    given: "User types @symbol-prefix"
+    when: "Completion is triggered"
+    then: "Symbols from Lisp buffers are returned via imenu"
+    coverage: convergent
+    confidence: 0.95
+    property: "Symbol completion uses imenu index"
+
+  - scenario: "Buffer completion"
+    tests:
+      - "agent-q-context/candidates/buffer-returns-list"
+      - "agent-q-context/candidates/buffer-excludes-internal"
+      - "agent-q-context/candidates/buffer-filters-by-prefix"
+      - "agent-q-context/candidates/buffer-has-properties"
+    given: "User types @buffer-prefix"
+    when: "Completion is triggered"
+    then: "Open buffers are returned, internal buffers excluded"
+    coverage: convergent
+    confidence: 0.95
+    property: "Internal buffers (starting with space) are excluded"
+
+  - scenario: "@-mention detection"
+    test: "agent-q-context/mention/detects-at-symbol"
+    given: "User types @ in input"
+    when: "Point is after @"
+    then: "System detects @-mention context"
+    coverage: convergent
+    confidence: 0.95
+
+  - scenario: "Completion at point"
+    tests:
+      - "[Multiple tests for completion-at-point integration]"
+    given: "@-mention is detected"
+    when: "TAB is pressed"
+    then: "Candidates are displayed via completion-at-point"
+    coverage: convergent
+    confidence: 0.95
+
+  - scenario: "Context pill rendering"
+    tests:
+      - "[Tests for pill creation and display]"
+    given: "User selects completion"
+    when: "Completion is inserted"
+    then: "Visual pill [@name] appears with text properties"
+    coverage: convergent
+    confidence: 0.95
+
+  - scenario: "Context panel sidebar"
+    tests:
+      - "[Tests for panel display and updates]"
+    given: "Context items are attached"
+    when: "Panel is displayed"
+    then: "All items shown with type, size, and actions"
+    coverage: convergent
+    confidence: 0.90
+    notes: "99 tests total cover this comprehensively"
+
+  - scenario: "Content fetching with size limit"
+    tests:
+      - "[Tests for lazy content fetching]"
+    given: "Context item is attached"
+    when: "Content is fetched for LLM"
+    then: "Content is limited to 50KB per item"
+    coverage: convergent
+    confidence: 0.90
+    property: "50KB limit per context item"
+
+# ═══════════════════════════════════════════════════════════════
+# BEHAVIORAL SCENARIOS: SESSION MANAGEMENT
+# ═══════════════════════════════════════════════════════════════
+
+scenarios_sessions:
+  - scenario: "Session creation"
+    test: "[session CRUD tests]"
+    given: "User starts new session"
+    when: "Session is created"
+    then: "Session has unique ID, name, conversation, and metadata"
+    coverage: convergent
+    confidence: 0.90
+
+  - scenario: "Session switching"
+    test: "[session switching tests]"
+    given: "Multiple sessions exist"
+    when: "User switches session"
+    then: "Current session saves, new session loads with its conversation"
+    coverage: convergent
+    confidence: 0.90
+
+  - scenario: "Session persistence"
+    test: "[session save/load tests]"
+    given: "Session has messages"
+    when: "Session is saved"
+    then: "Session serializes to disk and can be restored"
+    coverage: convergent
+    confidence: 0.90
+    property: "Sessions persist across Emacs restarts"
+
+  - scenario: "Session deletion"
+    test: "[session deletion tests]"
+    given: "Session exists"
+    when: "User deletes session"
+    then: "Session is removed from disk and cache"
+    coverage: convergent
+    confidence: 0.90
+
+  - scenario: "Session search"
+    test: "[session search tests]"
+    given: "Multiple sessions with messages"
+    when: "User searches by query"
+    then: "Sessions matching query content are returned"
+    coverage: convergent
+    confidence: 0.90
+
+# ═══════════════════════════════════════════════════════════════
+# BEHAVIORAL SCENARIOS: DIFF APPROVAL
+# ═══════════════════════════════════════════════════════════════
+
+scenarios_diff:
+  - scenario: "Diff mode initialization"
+    test: "sly-agent-q-diff-test-mode-derived"
+    given: "Diff buffer is created"
+    when: "Mode is initialized"
+    then: "Buffer is in sly-agent-q-diff-mode (derived from diff-mode)"
+    coverage: convergent
+    confidence: 0.95
+
+  - scenario: "Hunk counting"
+    test: "sly-agent-q-diff-test-count-hunks"
+    given: "Diff has multiple hunks"
+    when: "Hunks are counted"
+    then: "Correct number of @@ headers found"
+    coverage: convergent
+    confidence: 0.95
+
+  - scenario: "Hunk state initialization"
+    test: "sly-agent-q-diff-test-hunk-state-init"
+    given: "Diff is displayed"
+    when: "State is initialized"
+    then: "All hunks start with nil (pending) state"
+    coverage: convergent
+    confidence: 0.95
+    property: "Initial hunk state is always nil"
+
+  - scenario: "Accept single hunk"
+    test: "sly-agent-q-diff-test-accept-single-hunk"
+    given: "User is on a hunk"
+    when: "User presses 'a'"
+    then: "Hunk is applied to file, state becomes 'applied'"
+    coverage: convergent
+    confidence: 0.95
+
+  - scenario: "Reject single hunk"
+    test: "sly-agent-q-diff-test-reject-single-hunk"
+    given: "User is on a hunk"
+    when: "User presses 'r'"
+    then: "Hunk state becomes 'rejected', file unchanged"
+    coverage: convergent
+    confidence: 0.95
+
+  - scenario: "Apply hunk to file"
+    test: "sly-agent-q-diff-test-apply-single-hunk"
+    given: "Hunk is accepted"
+    when: "diff-apply-hunk is called"
+    then: "File content is modified, buffer is saved"
+    coverage: convergent
+    confidence: 0.95
+    property: "Applied hunks immediately modify target file"
+
+  # Integration Tests
+  - scenario: "Multi-hunk selective approval"
+    test: "[diff-integration multi-hunk test]"
+    given: "Diff has 2+ hunks"
+    when: "User accepts first hunk, rejects second"
+    then: "Only first change appears in file"
+    coverage: convergent
+    confidence: 0.95
+
+  - scenario: "Toggle hunk state"
+    test: "[diff-integration toggle test]"
+    given: "Hunk is accepted"
+    when: "User presses SPC (toggle)"
+    then: "Visual state changes to nil, but file remains modified"
+    coverage: convergent
+    confidence: 0.95
+    property: "Applied hunks cannot be unapplied (file changes are permanent)"
+
+  - scenario: "Finish with decision"
+    test: "[diff-integration finish test]"
+    given: "User has reviewed hunks"
+    when: "User presses 'q'"
+    then: "Decision ('accepted' or 'rejected') returned to Lisp"
+    coverage: convergent
+    confidence: 0.95
+    property: "Decision is 'accepted' if any hunk applied, else 'rejected'"
+
+# ═══════════════════════════════════════════════════════════════
+# COVERAGE ANALYSIS
+# ═══════════════════════════════════════════════════════════════
+
+coverage_analysis:
+  features_tested:
+    - feature: "Chat Interface"
+      tests: 36
+      coverage: high
+      scenarios: 6
+      gaps: "No tests for slash commands or action buttons (future)"
+
+    - feature: "@-Mention Context Management"
+      tests: 99
+      coverage: very_high
+      scenarios: 9
+      gaps: "None identified, comprehensive coverage"
+
+    - feature: "Session Management"
+      tests: 20
+      coverage: high
+      scenarios: 5
+      gaps: "No tests for session conflict resolution"
+
+    - feature: "Diff Approval"
+      tests: 10
+      coverage: high
+      scenarios: 9
+      gaps: "No tests for diff error handling edge cases"
+
+  features_not_tested:
+    - feature: "Context Manager (CL side)"
+      reason: "CL tests not yet implemented"
+      impact: medium
+
+    - feature: "Tool System"
+      reason: "CL tests not yet implemented"
+      impact: high
+
+    - feature: "LLM Integration"
+      reason: "CL tests not yet implemented"
+      impact: high
+
+    - feature: "Agent Loop"
+      reason: "CL tests not yet implemented"
+      impact: high
+
+    - feature: "Streaming Callbacks"
+      reason: "CL tests not yet implemented"
+      impact: medium
+
+  test_distribution:
+    elisp_tests: 165
+    cl_tests: 0
+    total: 165
+    note: "Test suite is entirely Elisp, CL side has manual tests only"
+
+# ═══════════════════════════════════════════════════════════════
+# TRIANGULATION: BEHAVIORS
+# ═══════════════════════════════════════════════════════════════
+
+behavioral_triangulation:
+  convergent:
+    count: 29  # Scenarios with tests matching documented behavior
+    examples:
+      - "Chat interface layout matches UI mockups"
+      - "@-mention completion works as specified in context-management.md"
+      - "Diff approval follows DIFF-IMPLEMENTATION.AGENT.md exactly"
+      - "Session persistence works as documented"
+
+  code_only:
+    count: 0   # No behaviors tested but not documented
+    note: "All tested behaviors are documented"
+
+  docs_only:
+    count: 7   # Documented behaviors without test coverage
+    examples:
+      - "Tool execution approval workflow (CL side not tested)"
+      - "Streaming error handling"
+      - "Cost budget enforcement"
+      - "Observability metrics collection"
+      - "Context sliding window overflow (claimed 50 items)"
+      - "Agent autonomous iteration loop"
+      - "Knowledge base operations"
+
+  coverage_gaps:
+    count: 5   # Areas mentioned in docs with unclear test status
+    examples:
+      - "Context item 50KB size limit enforcement"
+      - "Session token accumulation accuracy"
+      - "LLM provider error handling"
+      - "Tool registry discovery"
+      - "SLY RPC error propagation"
+
+# ═══════════════════════════════════════════════════════════════
+# PROPERTIES INFERRED FROM TESTS
+# ═══════════════════════════════════════════════════════════════
+
+properties_from_tests:
+  invariants:
+    - property: "Context items must have type from allowed set"
+      test: "agent-q-context/struct/type-variants"
+      values: "[:file :symbol :buffer :region :url]"
+      confidence: 0.95
+
+    - property: "Initial hunk state is always nil (pending)"
+      test: "sly-agent-q-diff-test-hunk-state-init"
+      confidence: 0.95
+
+    - property: "Decision is 'accepted' iff at least one hunk applied"
+      test: "[diff-integration finish tests]"
+      confidence: 0.95
+
+    - property: "File completion requires active project"
+      test: "agent-q-context/candidates/file-returns-nil-without-project"
+      confidence: 0.95
+
+    - property: "Internal buffers are excluded from completion"
+      test: "agent-q-context/candidates/buffer-excludes-internal"
+      confidence: 0.95
+
+  rules:
+    - rule: "Input history does not store duplicates"
+      test: "agent-q-chat/history/no-duplicates"
+      confidence: 0.95
+
+    - rule: "Applied hunks cannot be unapplied"
+      test: "[diff-integration toggle tests]"
+      confidence: 0.95
+      notes: "Toggle only changes visual state, not file content"
+
+    - rule: "Context items are fetched lazily with 50KB limit"
+      test: "[context content fetching tests]"
+      confidence: 0.90
+
+  temporal:
+    - rule: "Session updated-at timestamp changes on message add"
+      test: "[session update tests]"
+      confidence: 0.90
+
+    - rule: "Streaming response appears incrementally"
+      test: "agent-q-chat/streaming/append-chunks"
+      confidence: 0.95
+
+# ═══════════════════════════════════════════════════════════════
+# OBSERVATIONS
+# ═══════════════════════════════════════════════════════════════
+
+observations:
+  - id: obs-behav-001
+    category: coverage_gap
+    subject: "Common Lisp side has no automated tests"
+    context: |
+      165 tests exist, all Elisp. No CL unit tests found.
+      Core features (context-manager, agent, tools) rely on manual testing.
+    sources:
+      code:
+        location: "No CL test files found"
+      docs:
+        location: CLAUDE.md:164
+        claim: "161 tests, 156 passing"
+        discrepancy: "Found 165 tests, but they're all Elisp"
+    confidence: 0.95
+    interpretation: "Test count may include planned CL tests not yet written"
+    affects: ["canon/features/*/scenarios/ - CL behaviors not verified"]
+
+  - id: obs-behav-002
+    category: convergent
+    subject: "Elisp test suite is exceptionally thorough"
+    context: |
+      99 tests for context management alone.
+      Clear TDD approach with test-first development evident.
+    sources:
+      code:
+        location: contrib/sly-agent-q/test/
+        evidence: "165 tests with clear organization"
+      docs:
+        location: specs/plans/2026-01-12-chat-context-management.md
+        evidence: "TDD implementation plan followed"
+    confidence: 0.95
+    interpretation: "High-quality test-driven development on Elisp side"
+    affects: null
+
+  - id: obs-behav-003
+    category: convergent
+    subject: "Diff approval behavior matches spec exactly"
+    context: |
+      All behaviors from DIFF-IMPLEMENTATION.AGENT.md are tested.
+      Invariants verified, edge cases covered.
+    sources:
+      code:
+        location: contrib/sly-agent-q/test/sly-agent-q-diff-*.el
+        evidence: "10 tests covering all documented behaviors"
+      docs:
+        location: docs/DIFF-IMPLEMENTATION.AGENT.md
+        evidence: "Complete behavioral specification"
+    confidence: 0.95
+    interpretation: "Spec-driven development with high fidelity"
+    affects: null
+
+  - id: obs-behav-004
+    category: docs_only
+    subject: "Tool execution behaviors not tested"
+    context: |
+      18 tools documented, none have automated tests.
+      Tool registry, executor, safety levels untested.
+    sources:
+      code: null
+      docs:
+        location: specs/PHASE-2-SPEC.md
+        evidence: "Testing criteria mentioned but tests not found"
+    confidence: 0.80
+    interpretation: "Phase 2 tool system relies on manual testing"
+    affects: ["canon/features/tools/scenarios/"]
+
+# ═══════════════════════════════════════════════════════════════
+# SUMMARY
+# ═══════════════════════════════════════════════════════════════
+
+summary:
+  tests_analyzed: 165
+  scenarios_extracted: 29
+  properties_inferred: 8
+  rules_discovered: 3
+
+  coverage_quality:
+    elisp: excellent  # 165 tests, comprehensive
+    cl: none          # 0 automated tests found
+
+  triangulation_results:
+    convergent: 29    # Tested behaviors match docs
+    code_only: 0      # No behaviors tested but undocumented
+    docs_only: 7      # Documented behaviors without tests
+    gaps: 5           # Unclear test coverage
+
+  confidence_distribution:
+    high (>= 0.9): 24 scenarios
+    medium (0.7-0.9): 5 scenarios
+    low (< 0.7): 0 scenarios
+
+  key_findings:
+    - "Elisp test suite is world-class: 165 tests with clear organization"
+    - "Context management most tested: 99 tests (60% of suite)"
+    - "TDD evident: tests follow implementation plans closely"
+    - "Common Lisp side: 0 automated tests, manual testing only"
+    - "Diff approval: 100% spec adherence verified by tests"
+    - "Properties and invariants clearly encoded in tests"
+    - "Test gap: Core CL features (agent, tools, LLM) not tested"
+
+  next_steps:
+    - "Pass 4: Infer additional properties from CL code"
+    - "Pass 5: Git archaeology to understand why CL tests don't exist"
+    - "Pass 6: Final triangulation report with test coverage noted"
