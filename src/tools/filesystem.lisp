@@ -166,28 +166,20 @@
      (string= pattern filename))
 
     ;; Recursive wildcard **/*.ext
-    ;; Matches any path ending with suffix pattern
+    ;; Matches files in ANY subdirectory with the suffix pattern
     ;; Example: "**/*.lisp" matches "src/foo.lisp", "a/b/c.lisp", "test.lisp"
     ((search "**/" pattern)
      (let* ((pos (search "**/" pattern))
             (suffix-pattern (subseq pattern (+ pos 3)))) ; Skip past "**/"
        (and suffix-pattern
             (> (length suffix-pattern) 0)
-            ;; Match suffix pattern against filename
-            ;; For simple patterns like *.ext, match against basename
-            ;; For complex patterns with /, match against full path
-            (if (not (find #\/ suffix-pattern))
-                ;; Simple pattern - match against basename
-                (glob-matches-p suffix-pattern
-                               (let ((slash-pos (position #\/ filename :from-end t)))
-                                 (if slash-pos
-                                     (subseq filename (1+ slash-pos))
-                                     filename)))
-                ;; Complex pattern - try matching against path tail
-                (and (>= (length filename) (length suffix-pattern))
-                     (glob-matches-p suffix-pattern
-                                    (subseq filename (- (length filename)
-                                                       (length suffix-pattern)))))))))
+            ;; For **, just check if the suffix pattern matches the basename
+            ;; This way **/*.lisp matches any file ending in .lisp regardless of depth
+            (glob-matches-p suffix-pattern
+                           (let ((slash-pos (position #\/ filename :from-end t)))
+                             (if slash-pos
+                                 (subseq filename (1+ slash-pos))
+                                 filename))))))
 
     ;; Simple suffix match *.ext
     ((and (> (length pattern) 0)
@@ -209,13 +201,11 @@
 
     ;; Question mark (single char)
     ((find #\? pattern)
-     ;; Simple implementation: convert ? to . for basic matching
-     ;; Full regex implementation would be more complex
+     ;; ? matches any single character
      (and (= (length pattern) (length filename))
           (every (lambda (pc fc)
-                  (or (char= pc #\?)
-                      (char= pc #\*)
-                      (char= pc fc)))
+                  (or (char= pc #\?)      ; ? matches any single char
+                      (char= pc fc)))     ; exact match for non-wildcard chars
                 pattern filename)))
 
     ;; Default: no match

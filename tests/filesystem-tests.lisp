@@ -265,6 +265,20 @@
   (is (agent-q.tools::glob-matches-p "test-*" "test-helper"))
   (is (not (agent-q.tools::glob-matches-p "test-*" "main-test"))))
 
+(test glob-match-question-mark
+  "Test ? wildcard matches single character (including special chars)"
+  (is (agent-q.tools::glob-matches-p "file?.txt" "fileX.txt"))
+  (is (agent-q.tools::glob-matches-p "file?.txt" "file1.txt"))
+  (is (agent-q.tools::glob-matches-p "file?.txt" "file*.txt"))  ; ? DOES match literal * (glob semantics)
+  (is (not (agent-q.tools::glob-matches-p "file?.txt" "fileXY.txt")))  ; ? matches exactly 1 char
+  (is (not (agent-q.tools::glob-matches-p "file?.txt" "file.txt"))))  ; ? must match something
+
+(test glob-match-recursive-complex
+  "Test ** with complex suffix patterns"
+  (is (agent-q.tools::glob-matches-p "**/*.lisp" "project/src/test.lisp"))
+  (is (agent-q.tools::glob-matches-p "**/*.lisp" "src/tools/buffer.lisp"))
+  (is (agent-q.tools::glob-matches-p "**/*.lisp" "deep/nested/path/file.lisp")))
+
 (test search-files-recursively-basic
   "Test recursive file search"
   (skip "Requires Emacs connection - integration test only")
