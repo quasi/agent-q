@@ -190,3 +190,116 @@
                            (format nil "Project root: ~A~%~%Detection method: ~A"
                                    (namestring root) method))))))
   (register-tool *agent-q-registry* tool))
+
+;;; ============================================================================
+;;; File Content Helpers
+;;; ============================================================================
+;;; ABOUTME: Helpers for reading, writing, and diffing file contents.
+;;; Used by edit_file tool for str_replace semantics.
+
+(defun read-file-content (path)
+  "Read file content via Emacs."
+  (eval-in-emacs
+   `(with-temp-buffer
+      (insert-file-contents ,path)
+      (buffer-string))))
+
+(defun write-file-content (path content)
+  "Write content to file via Emacs, syncing any open buffers."
+  (eval-in-emacs
+   `(let ((buf (find-buffer-visiting ,path)))
+      (if buf
+          ;; File is open - modify the buffer
+          (with-current-buffer buf
+            (let ((inhibit-read-only t))
+              (erase-buffer)
+              (insert ,content)
+              (save-buffer)))
+        ;; File not open - write directly
+        (with-temp-file ,path
+          (insert ,content)))
+      t)))
+
+(defun generate-mini-diff (old-str new-str)
+  "Generate a minimal diff display for the change."
+  (with-output-to-string (s)
+    (format s "~%Diff:~%")
+    (dolist (line (uiop:split-string old-str :separator '(#\Newline)))
+      (format s "  - ~A~%" line))
+    (dolist (line (uiop:split-string new-str :separator '(#\Newline)))
+      (format s "  + ~A~%" line))))
+
+(defun truncate-for-display (str max-len)
+  "Truncate string for display if too long."
+  (if (> (length str) max-len)
+      (concatenate 'string (subseq str 0 (- max-len 3)) "...")
+      str))
+
+(defun literal-string-replace (old-str new-str content)
+  "Replace OLD-STR with NEW-STR in CONTENT using literal (non-regex) matching.
+   Only replaces the first occurrence."
+  (let ((pos (search old-str content)))
+    (when pos
+      (concatenate 'string
+                   (subseq content 0 pos)
+                   new-str
+                   (subseq content (+ pos (length old-str)))))))
+
+;;; ============================================================================
+;;; edit_file Tool
+;;; ============================================================================
+;;; ABOUTME: Core editing tool implementing str_replace semantics.
+;;; Requires exact string matching with unique occurrences for safety.
+
+(let ((tool (define-tool
+              "edit_file"
+              "Make targeted edits to a file using exact string replacement.
+               The old_str must match EXACTLY once in the file.
+               For multiple changes, call multiple times.
+               WARNING: This modifies files. Changes are logged."
+              '((:name "path" :type :string :description "File path (relative to project root)")
+                (:name "old_str" :type :string :description "Exact string to find (must be unique)")
+                (:name "new_str" :type :string :description "Replacement string")
+                (:name "description" :type :string :description "What this change does (for logging)"))
+              :required '("path" "old_str" "new_str")
+              :safety-level :moderate
+              :categories '(:filesystem :editing)
+              :handler (lambda (args)
+                         (block edit-file-handler
+                           (let* ((path (gethash "path" args))
+                                  (old-str (gethash "old_str" args))
+                                  (new-str (gethash "new_str" args))
+                                  (description (gethash "description" args))
+                                  (resolved (agent-q::resolve-project-path path)))
+                             ;; Validate path
+                             (unless resolved
+                               (return-from edit-file-handler
+                                 (format nil "Error: Path '~A' is outside project root" path)))
+
+                             (handler-case
+                                 (let* ((content (read-file-content (namestring resolved)))
+                                        (match-count (count-substring old-str content)))
+                                   (cond
+                                     ;; No matches
+                                     ((zerop match-count)
+                                      (format nil "Error: String not found in ~A~%~%Searched for:~%~A"
+                                             path (truncate-for-display old-str 200)))
+
+                                     ;; Multiple matches - need more context
+                                     ((> match-count 1)
+                                      (format nil "Error: Found ~D matches in ~A.~%~%~
+                                                  Please provide more surrounding context to make a unique match."
+                                             match-count path))
+
+                                     ;; Exactly one match - apply edit
+                                     (t
+                                      (let* ((new-content (literal-string-replace old-str new-str content))
+                                             (diff (generate-mini-diff old-str new-str)))
+                                        ;; Write via Emacs
+                                        (write-file-content (namestring resolved) new-content)
+                                        ;; Return confirmation
+                                        (format nil "Edit applied to ~A~%~%~@[Change: ~A~%~]~A"
+                                               path description diff)))))
+                               (error (e)
+                                 (format nil "Error editing file: ~A" e)))))))))
+  (register-tool *agent-q-registry* tool))

@@ -232,3 +232,42 @@ def bar"))))
   "count-substring should count non-overlapping occurrences"
   ;; "aa" in "aaa" should be 1, not 2 (non-overlapping)
   (is (= 1 (agent-q.tools::count-substring "aa" "aaa"))))
+
+;;; ============================================================================
+;;; edit_file Tool Tests
+;;; ============================================================================
+;;; ABOUTME: Tests for the edit_file tool which performs targeted string
+;;; replacement in files. Uses str_replace semantics requiring unique matches.
+
+(test edit-file-tool-exists
+  "edit_file tool should be registered"
+  ;; edit_file is :moderate, need to query with that safety level
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "edit_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (is (equal (tool-name tool) "edit_file"))))
+
+(test edit-file-is-moderate
+  "edit_file should have :moderate safety level (not :safe)"
+  ;; Should appear with :moderate level but not :safe
+  (let ((moderate-tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+        (safe-tools (agent-q.tools:get-agent-q-tools :max-safety-level :safe)))
+    (is (find "edit_file" moderate-tools :test #'equal :key #'tool-name))
+    (is (not (find "edit_file" safe-tools :test #'equal :key #'tool-name)))))
+
+(test edit-file-has-required-parameters
+  "edit_file should require path, old_str, and new_str"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "edit_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (let ((required (tool-required tool)))
+      (is (member "path" required :test #'equal))
+      (is (member "old_str" required :test #'equal))
+      (is (member "new_str" required :test #'equal)))))
+
+(test edit-file-has-description
+  "edit_file should have a description mentioning string replacement"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "edit_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (is (search "replacement" (tool-description tool) :test #'char-equal))))

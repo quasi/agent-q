@@ -102,6 +102,28 @@ features:
   - name: "diff-approval"
     path: "features/diff-approval/"
     phase: 2
+
+  - name: "file-system-tools"
+    path: "features/file-system-tools/"
+    phase: 2
+    status: draft
+    confidence: 0.70
+    triangulation: research_only
+    description: "Comprehensive file reading, writing, editing, and navigation tools"
+    key_files:
+      - "src/tools/buffer.lisp"
+      - "src/tools/filesystem.lisp (planned)"
+    tests: 0
+    depends_on:
+      - "tool-system"
+      - "diff-approval"
+    research: "canon/research/2026-01-20-file-system-tools.research.md"
+    notes: |
+      New feature extending tool-system with:
+      - Directory listing and tree navigation
+      - str_replace style file editing
+      - Project root boundary enforcement
+      - File creation, move, delete with approval
     status: complete
     confidence: 0.95
     triangulation: convergent
