@@ -569,3 +569,30 @@
                                (error (e)
                                  (format nil "Error editing file: ~A" e)))))))))
   (register-tool *agent-q-registry* tool))
+
+;;; ============================================================================
+;;; insert_at_line Helper Functions
+;;; ============================================================================
+
+(defun insert-content-at-line (lines content line-number)
+  "Insert CONTENT at LINE-NUMBER in LINES (list of strings).
+   Line numbering: 0 = beginning, -1 = end, 1-indexed otherwise.
+   Returns new list of lines, or NIL if line-number invalid."
+  (let ((total-lines (length lines)))
+    (cond
+      ;; Line 0: beginning of file
+      ((= line-number 0)
+       (cons content lines))
+
+      ;; Line -1: end of file
+      ((= line-number -1)
+       (append lines (list content)))
+
+      ;; Positive line number: 1-indexed insertion
+      ((and (> line-number 0) (<= line-number total-lines))
+       (let ((before (subseq lines 0 line-number))
+             (after (subseq lines line-number)))
+         (append before (list content) after)))
+
+      ;; Invalid line number
+      (t nil))))

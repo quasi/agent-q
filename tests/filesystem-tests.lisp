@@ -676,6 +676,36 @@ def bar"))))
     (is (search "replacement" (tool-description tool) :test #'char-equal))))
 
 ;;; ============================================================================
+;;; insert_at_line Helper Tests
+;;; ============================================================================
+;;; ABOUTME: Tests for insert-content-at-line helper function.
+;;; This function inserts content at a specific line number in a list of strings.
+
+(test insert-content-at-line-beginning
+  "Insert at line 0 (beginning of file)"
+  (let* ((lines '("first" "second" "third"))
+         (result (agent-q.tools::insert-content-at-line lines "new line" 0)))
+    (is (equal result '("new line" "first" "second" "third")))))
+
+(test insert-content-at-line-middle
+  "Insert in the middle of file"
+  (let* ((lines '("first" "second" "third"))
+         (result (agent-q.tools::insert-content-at-line lines "new line" 2)))
+    (is (equal result '("first" "second" "new line" "third")))))
+
+(test insert-content-at-line-end
+  "Insert at end of file (line -1)"
+  (let* ((lines '("first" "second" "third"))
+         (result (agent-q.tools::insert-content-at-line lines "new line" -1)))
+    (is (equal result '("first" "second" "third" "new line")))))
+
+(test insert-content-at-line-invalid
+  "Invalid line number returns nil"
+  (let* ((lines '("first" "second"))
+         (result (agent-q.tools::insert-content-at-line lines "new" 10)))
+    (is (null result))))
+
+;;; ============================================================================
 ;;; Test Runner
 ;;; ============================================================================
 
