@@ -596,3 +596,60 @@
 
       ;; Invalid line number
       (t nil))))
+
+;;; ============================================================================
+;;; insert_at_line Tool
+;;; ============================================================================
+
+(let ((tool (define-tool
+              "insert_at_line"
+              "Insert content at a specific line number in a file. Line numbering is 1-indexed.
+               Use line 0 for beginning of file, -1 for end of file.
+               WARNING: This modifies files. Changes are logged."
+              '((:name "path" :type :string :description "File path (relative to project root)")
+                (:name "content" :type :string :description "Content to insert (can be multiple lines)")
+                (:name "line" :type :integer :description "Line number (0=beginning, -1=end, 1-indexed otherwise)"))
+              :required '("path" "content" "line")
+              :safety-level :moderate
+              :categories '(:filesystem :editing)
+              :handler (lambda (args)
+                         (block insert-at-line-handler
+                           (let* ((path (gethash "path" args))
+                                  (content (gethash "content" args))
+                                  (line-num (gethash "line" args))
+                                  (resolved (agent-q::resolve-project-path path)))
+
+                             ;; Path safety check
+                             (unless resolved
+                               (return-from insert-at-line-handler
+                                 (format nil "Error: Path '~A' is outside project root" path)))
+
+                             (handler-case
+                                 (progn
+                                   ;; Read file content
+                                   (let* ((file-content (eval-in-emacs
+                                                         `(with-temp-buffer
+                                                            (insert-file-contents ,(namestring resolved))
+                                                            (buffer-string))))
+                                          (lines (uiop:split-string file-content :separator '(#\Newline)))
+                                          (updated-lines (insert-content-at-line lines content line-num)))
+
+                                     (unless updated-lines
+                                       (return-from insert-at-line-handler
+                                         (format nil "Error: Invalid line number ~A (file has ~A lines)"
+                                                 line-num (length lines))))
+
+                                     ;; Write updated content back
+                                     (let ((new-content (format nil "~{~A~^~%~}" updated-lines)))
+                                       (eval-in-emacs
+                                        `(with-temp-file ,(namestring resolved)
+                                           (insert ,new-content)))
+
+                                       ;; Return success message
+                                       (with-output-to-string (s)
+                                         (format s "✓ Inserted content at line ~A in ~A~%~%" line-num path)
+                                         (format s "Content inserted: ~A~%" content)))))
+
+                               (error (e)
+                                 (format nil "Error inserting content: ~A" e)))))))))
+  (register-tool *agent-q-registry* tool))

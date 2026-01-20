@@ -14,6 +14,18 @@
 
 (in-suite filesystem-tests)
 
+;;; Helper functions for accessing tool properties
+(defun tool-parameters (tool-def)
+  "Get parameters from a tool definition."
+  (slot-value tool-def 'cl-llm-provider::parameters))
+
+(defun find-tool-definition (tool-name)
+  "Find and return the full tool definition."
+  (let ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate)))
+    (loop for tool in tools
+          when (equal (tool-name tool) tool-name)
+          return tool)))
+
 (test project-root-variable-exists
   "Project root variable should exist and be configurable"
   (is (boundp 'agent-q:*project-root*))
@@ -704,6 +716,48 @@ def bar"))))
   (let* ((lines '("first" "second"))
          (result (agent-q.tools::insert-content-at-line lines "new" 10)))
     (is (null result))))
+
+;;; ============================================================================
+;;; insert_at_line tool tests
+;;; ============================================================================
+
+(test insert-at-line-tool-registered
+  "insert_at_line tool is registered"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "insert_at_line" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (is (equal (tool-name tool) "insert_at_line"))))
+
+(test insert-at-line-tool-parameters
+  "insert_at_line has correct parameters"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "insert_at_line" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (let ((params (tool-parameters tool)))
+      (is (= 3 (length params)))
+      (is (find-if (lambda (p) (string= "path" (getf p :name))) params))
+      (is (find-if (lambda (p) (string= "content" (getf p :name))) params))
+      (is (find-if (lambda (p) (string= "line" (getf p :name))) params)))))
+
+(test insert-at-line-tool-safety
+  "insert_at_line has moderate safety level (not :safe)"
+  ;; Should appear with :moderate level but not :safe
+  (let ((moderate-tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+        (safe-tools (agent-q.tools:get-agent-q-tools :max-safety-level :safe)))
+    (is (find "insert_at_line" moderate-tools :test #'equal :key #'tool-name))
+    (is (not (find "insert_at_line" safe-tools :test #'equal :key #'tool-name)))))
+
+(test insert-at-line-path-validation
+  "insert_at_line rejects paths outside project root"
+  (skip "Requires Emacs connection")
+  (let* ((tool (find-tool-definition "insert_at_line"))
+         (handler (tool-handler tool))
+         (args (make-hash-table :test 'equal)))
+    (setf (gethash "path" args) "../../etc/passwd")
+    (setf (gethash "content" args) "malicious")
+    (setf (gethash "line" args) 0)
+    (let ((result (funcall handler args)))
+      (is (search "outside project root" result)))))
 
 ;;; ============================================================================
 ;;; Test Runner
