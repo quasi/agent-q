@@ -104,3 +104,34 @@
     ;; by checking that our root + "-secrets" suffix would be rejected
     (is (null (agent-q::resolve-project-path (namestring sibling)))
         "Should reject sibling directories that share prefix with project root")))
+
+;;; ============================================================================
+;;; list_directory Tool Tests
+;;; ============================================================================
+;;; ABOUTME: Tests for the list_directory tool which lists files and directories
+;;; within the project root boundary. Uses resolve-project-path for security.
+
+(test list-directory-tool-exists
+  "list_directory tool should be registered"
+  (let ((tool (find-tool-definition "list_directory")))
+    (is (not (null tool)))
+    (is (equal (tool-name tool) "list_directory"))))
+
+(test list-directory-is-safe
+  "list_directory should have :safe safety level"
+  ;; Should appear in safe tools list
+  (let ((safe-tools (agent-q.tools:get-agent-q-tools :max-safety-level :safe)))
+    (is (find "list_directory" safe-tools :test #'equal :key #'tool-name))))
+
+(test list-directory-has-required-parameters
+  "list_directory should require the path parameter"
+  (let ((tool (find-tool-definition "list_directory")))
+    (is (not (null tool)))
+    (let ((required (tool-required tool)))
+      (is (member "path" required :test #'equal)))))
+
+(test list-directory-has-description
+  "list_directory should have a description mentioning directory listing"
+  (let ((tool (find-tool-definition "list_directory")))
+    (is (not (null tool)))
+    (is (search "directory" (tool-description tool) :test #'char-equal))))
