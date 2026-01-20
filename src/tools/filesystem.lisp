@@ -58,6 +58,95 @@
                       (format nil "~40T(~A)" (format-file-size size))
                       "")))))))
 
+(defun matches-exclusion-p (name exclusions)
+  "Check if NAME matches any glob pattern in EXCLUSIONS."
+  (when exclusions
+    (some (lambda (pattern)
+            (cond
+              ;; Exact match
+              ((not (find #\* pattern))
+               (string= name pattern))
+              ;; Suffix match (*.fasl)
+              ((and (char= (char pattern 0) #\*)
+                    (not (find #\* pattern :start 1)))
+               (let ((suffix (subseq pattern 1)))
+                 (and (>= (length name) (length suffix))
+                      (string= suffix name :start2 (- (length name) (length suffix))))))
+              ;; Prefix match (TODO*)
+              ((and (char= (char pattern (1- (length pattern))) #\*)
+                    (not (find #\* pattern :end (1- (length pattern)))))
+               (let ((prefix (subseq pattern 0 (1- (length pattern)))))
+                 (and (>= (length name) (length prefix))
+                      (string= prefix name :end2 (length prefix)))))
+              ;; Default: no match for complex patterns
+              (t nil)))
+          exclusions)))
+
+(defun build-directory-tree (path exclusions)
+  "Build a recursive directory tree structure.
+   EXCLUSIONS is a list of glob patterns to skip."
+  (handler-case
+      (let ((entries (eval-in-emacs
+                      `(let* ((dir ,path)
+                              (files (directory-files-and-attributes dir nil nil t)))
+                         (cl-loop for (name . attrs) in files
+                                  unless (member name '("." "..") :test #'string=)
+                                  collect (list :name name
+                                               :type (if (eq (file-attribute-type attrs) t)
+                                                        :directory :file)
+                                               :size (file-attribute-size attrs)))))))
+        ;; Check if eval-in-emacs returned an error string
+        (when (stringp entries)
+          (return-from build-directory-tree (list :error entries)))
+
+        (let ((filtered (remove-if (lambda (entry)
+                                    (matches-exclusion-p (getf entry :name) exclusions))
+                                  entries)))
+          (list :name (file-namestring (pathname path))
+                :type :directory
+                :children (mapcar (lambda (entry)
+                                   (if (eq (getf entry :type) :directory)
+                                       ;; Recurse into subdirectories
+                                       (build-directory-tree
+                                        (merge-pathnames
+                                         (concatenate 'string (getf entry :name) "/")
+                                         path)
+                                        exclusions)
+                                       ;; Files are leaf nodes
+                                       entry))
+                                 filtered))))
+    (error (e)
+      (list :error (format nil "~A" e)))))
+
+(defun format-directory-tree (tree &optional (indent 0))
+  "Format directory tree as indented text for LLM consumption."
+  (if (getf tree :error)
+      (format nil "Error: ~A" (getf tree :error))
+      (with-output-to-string (s)
+
+    (let ((spaces (make-string indent :initial-element #\Space))
+          (name (getf tree :name))
+          (type (getf tree :type))
+          (children (getf tree :children)))
+
+      ;; Print current node
+      (format s "~A~A~A~%"
+              spaces
+              (if (eq type :directory) "[DIR]  " "[FILE] ")
+              name)
+
+      ;; Recurse for children
+      (when children
+        (dolist (child children)
+          (if (eq (getf child :type) :directory)
+              (format s "~A" (format-directory-tree child (+ indent 2)))
+              (let ((child-name (getf child :name))
+                    (child-size (getf child :size)))
+                (format s "~A[FILE] ~A~@[ (~A)~]~%"
+                        (make-string (+ indent 2) :initial-element #\Space)
+                        child-name
+                        (when child-size (format-file-size child-size)))))))))))
+
 ;;; ============================================================================
 ;;; list_directory Tool
 ;;; ============================================================================

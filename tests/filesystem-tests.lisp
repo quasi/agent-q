@@ -106,6 +106,140 @@
         "Should reject sibling directories that share prefix with project root")))
 
 ;;; ============================================================================
+;;; Directory Tree Helper Tests
+;;; ============================================================================
+;;; ABOUTME: Tests for helper functions used by directory_tree tool.
+;;; These include pattern matching, tree building, and formatting.
+
+(defmacro with-temp-directory ((var) &body body)
+  "Execute BODY with VAR bound to a temporary directory path.
+   Directory is created before and cleaned up after execution."
+  `(let ((,var (merge-pathnames
+                (make-pathname :directory (list :relative
+                                               (format nil "agent-q-test-~A"
+                                                      (get-universal-time))))
+                (uiop:temporary-directory))))
+     (ensure-directories-exist ,var)
+     (unwind-protect
+          (progn ,@body)
+       (ignore-errors (uiop:delete-directory-tree ,var :validate t)))))
+
+(test matches-exclusion-p-exact-match
+  "matches-exclusion-p should match exact filenames"
+  (is (agent-q.tools::matches-exclusion-p ".git" '(".git" "node_modules")))
+  (is (not (agent-q.tools::matches-exclusion-p ".github" '(".git" "node_modules")))))
+
+(test matches-exclusion-p-suffix-match
+  "matches-exclusion-p should match suffix patterns like *.fasl"
+  (is (agent-q.tools::matches-exclusion-p "foo.fasl" '("*.fasl")))
+  (is (agent-q.tools::matches-exclusion-p "bar.fasl" '("*.fasl")))
+  (is (not (agent-q.tools::matches-exclusion-p "foo.lisp" '("*.fasl")))))
+
+(test matches-exclusion-p-prefix-match
+  "matches-exclusion-p should match prefix patterns like TODO*"
+  (is (agent-q.tools::matches-exclusion-p "TODO.txt" '("TODO*")))
+  (is (agent-q.tools::matches-exclusion-p "TODO-notes" '("TODO*")))
+  (is (not (agent-q.tools::matches-exclusion-p "FIXME" '("TODO*")))))
+
+(test matches-exclusion-p-empty-list
+  "matches-exclusion-p should return nil for empty exclusion list"
+  (is (not (agent-q.tools::matches-exclusion-p "anything" nil)))
+  (is (not (agent-q.tools::matches-exclusion-p "anything" '()))))
+
+(test build-directory-tree-single-level
+  "Test building directory tree for a single level"
+  (skip "Requires Emacs connection - integration test only")
+  (with-temp-directory (tmpdir)
+    ;; Create structure: tmpdir/a.txt, tmpdir/subdir/
+    (let ((file1 (merge-pathnames "a.txt" tmpdir))
+          (subdir (merge-pathnames "subdir/" tmpdir)))
+      (with-open-file (s file1 :direction :output)
+        (write-string "test" s))
+      (ensure-directories-exist subdir)
+
+      (let ((tree (agent-q.tools::build-directory-tree (namestring tmpdir) nil)))
+        (is (equal :directory (getf tree :type)))
+        (is (listp (getf tree :children)))
+        (is (= 2 (length (getf tree :children))))
+        ;; Check file entry exists
+        (is (find "a.txt" (getf tree :children) :key (lambda (e) (getf e :name)) :test #'string=))
+        ;; Check directory entry exists
+        (is (find "subdir" (getf tree :children) :key (lambda (e) (getf e :name)) :test #'string=))))))
+
+(test build-directory-tree-recursive
+  "Test building directory tree recursively"
+  (skip "Requires Emacs connection - integration test only")
+  (with-temp-directory (tmpdir)
+    ;; Create nested structure
+    (let ((subdir (merge-pathnames "subdir/" tmpdir))
+          (nested (merge-pathnames "subdir/nested/" tmpdir))
+          (file1 (merge-pathnames "subdir/b.txt" tmpdir)))
+      (ensure-directories-exist nested)
+      (with-open-file (s file1 :direction :output)
+        (write-string "test" s))
+
+      (let ((tree (agent-q.tools::build-directory-tree (namestring tmpdir) nil)))
+        ;; Check top level has subdir
+        (let ((subdir-entry (find "subdir" (getf tree :children)
+                                  :key (lambda (e) (getf e :name)) :test #'string=)))
+          (is (not (null subdir-entry)))
+          (is (equal :directory (getf subdir-entry :type)))
+          ;; Check subdir has children
+          (is (= 2 (length (getf subdir-entry :children)))))))))
+
+(test build-directory-tree-with-exclusions
+  "Test excluding patterns from tree"
+  (skip "Requires Emacs connection - integration test only")
+  (with-temp-directory (tmpdir)
+    (let ((file1 (merge-pathnames "keep.lisp" tmpdir))
+          (file2 (merge-pathnames "ignore.fasl" tmpdir))
+          (gitdir (merge-pathnames ".git/" tmpdir)))
+      (with-open-file (s file1 :direction :output)
+        (write-string "test" s))
+      (with-open-file (s file2 :direction :output)
+        (write-string "test" s))
+      (ensure-directories-exist gitdir)
+
+      (let ((tree (agent-q.tools::build-directory-tree
+                   (namestring tmpdir)
+                   '("*.fasl" ".git"))))
+        ;; Should only have keep.lisp
+        (is (= 1 (length (getf tree :children))))
+        (is (string= "keep.lisp" (getf (first (getf tree :children)) :name)))))))
+
+(test format-directory-tree-simple
+  "Test formatting a simple directory tree"
+  (let ((tree (list :name "root"
+                    :type :directory
+                    :children (list (list :name "file.txt" :type :file :size 100)
+                                   (list :name "subdir" :type :directory :children nil)))))
+    (let ((output (agent-q.tools::format-directory-tree tree)))
+      (is (search "[DIR]  root" output))
+      (is (search "[FILE] file.txt" output))
+      (is (search "[DIR]  subdir" output)))))
+
+(test format-directory-tree-nested
+  "Test formatting nested directory structure"
+  (let ((tree (list :name "root"
+                    :type :directory
+                    :children (list (list :name "subdir"
+                                         :type :directory
+                                         :children (list (list :name "nested.txt" :type :file :size 50)))))))
+    (let ((output (agent-q.tools::format-directory-tree tree)))
+      (is (search "[DIR]  root" output))
+      (is (search "[DIR]  subdir" output))
+      (is (search "[FILE] nested.txt" output))
+      ;; Check indentation - nested file should be indented more
+      (is (> (search "[FILE] nested.txt" output)
+             (search "[DIR]  subdir" output))))))
+
+(test format-directory-tree-with-error
+  "Test formatting tree with error"
+  (let ((tree (list :error "Access denied")))
+    (let ((output (agent-q.tools::format-directory-tree tree)))
+      (is (search "Error: Access denied" output)))))
+
+;;; ============================================================================
 ;;; list_directory Tool Tests
 ;;; ============================================================================
 ;;; ABOUTME: Tests for the list_directory tool which lists files and directories
