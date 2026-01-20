@@ -42,4 +42,5 @@
    #:eval-form-handler
    #:run-phase-2-tests
    #:run-core-tests
+   #:run-filesystem-tests
    #:run-agent-q-tests))

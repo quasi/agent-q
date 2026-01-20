@@ -289,7 +289,7 @@
   (run! 'core-functionality))
 
 (defun run-agent-q-tests ()
-  "Run all Agent-Q tests (core + session + phase 2)."
+  "Run all Agent-Q tests (core + session + phase 2 + filesystem)."
   (format t "~%~%╔════════════════════════════════════════╗~%")
   (format t "║   Agent-Q Comprehensive Test Suite   ║~%")
   (format t "╚════════════════════════════════════════╝~%~%")
@@ -305,6 +305,10 @@
   ;; Phase 2 tests
   (format t "~%~%=== Phase 2 Tests ===~%~%")
   (run-phase-2-tests)
+
+  ;; Filesystem tests
+  (format t "~%~%=== Filesystem Tests ===~%~%")
+  (run-filesystem-tests)
 
   (format t "~%~%╔════════════════════════════════════════╗~%")
   (format t "║   All Tests Complete                   ║~%")

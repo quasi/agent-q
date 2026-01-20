@@ -271,3 +271,11 @@ def bar"))))
          (tool (find "edit_file" tools :test #'equal :key #'tool-name)))
     (is (not (null tool)))
     (is (search "replacement" (tool-description tool) :test #'char-equal))))
+
+;;; ============================================================================
+;;; Test Runner
+;;; ============================================================================
+
+(defun run-filesystem-tests ()
+  "Run all filesystem tests."
+  (run! 'filesystem-tests))
