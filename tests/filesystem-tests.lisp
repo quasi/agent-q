@@ -240,6 +240,68 @@
       (is (search "Error: Access denied" output)))))
 
 ;;; ============================================================================
+;;; search_files Helper Function Tests
+;;; ============================================================================
+;;; ABOUTME: Tests for glob matching and recursive file search helpers.
+;;; These functions support the search_files tool with glob patterns and exclusions.
+
+(test glob-match-simple-wildcard
+  "Test glob matching with * wildcard"
+  (is (agent-q.tools::glob-matches-p "*.lisp" "test.lisp"))
+  (is (agent-q.tools::glob-matches-p "*.lisp" "package.lisp"))
+  (is (not (agent-q.tools::glob-matches-p "*.lisp" "test.el")))
+  (is (not (agent-q.tools::glob-matches-p "*.lisp" "test.lisp.bak"))))
+
+(test glob-match-recursive-wildcard
+  "Test glob matching with ** recursive wildcard"
+  (is (agent-q.tools::glob-matches-p "**/*.lisp" "src/package.lisp"))
+  (is (agent-q.tools::glob-matches-p "**/*.lisp" "src/tools/buffer.lisp"))
+  (is (agent-q.tools::glob-matches-p "**/*.lisp" "test.lisp"))
+  (is (not (agent-q.tools::glob-matches-p "**/*.lisp" "src/test.el"))))
+
+(test glob-match-prefix
+  "Test glob matching with prefix"
+  (is (agent-q.tools::glob-matches-p "test-*" "test-main"))
+  (is (agent-q.tools::glob-matches-p "test-*" "test-helper"))
+  (is (not (agent-q.tools::glob-matches-p "test-*" "main-test"))))
+
+(test search-files-recursively-basic
+  "Test recursive file search"
+  (skip "Requires Emacs connection - integration test only")
+  (with-temp-directory (tmpdir)
+    ;; Create structure
+    (let ((file1 (merge-pathnames "test.lisp" tmpdir))
+          (subdir (merge-pathnames "src/" tmpdir))
+          (file2 (merge-pathnames "src/main.lisp" tmpdir))
+          (file3 (merge-pathnames "src/test.el" tmpdir)))
+      (with-open-file (s file1 :direction :output) (write-string "test" s))
+      (ensure-directories-exist subdir)
+      (with-open-file (s file2 :direction :output) (write-string "test" s))
+      (with-open-file (s file3 :direction :output) (write-string "test" s))
+
+      (let ((results (agent-q.tools::search-files-recursively
+                      (namestring tmpdir) "*.lisp" nil)))
+        (is (= 2 (length results)))
+        (is (find "test.lisp" results :test #'search))
+        (is (find "main.lisp" results :test #'search))))))
+
+(test search-files-with-exclusions
+  "Test search respects exclusions"
+  (skip "Requires Emacs connection - integration test only")
+  (with-temp-directory (tmpdir)
+    (let ((gitdir (merge-pathnames ".git/" tmpdir))
+          (file1 (merge-pathnames ".git/config" tmpdir))
+          (file2 (merge-pathnames "real.txt" tmpdir)))
+      (ensure-directories-exist gitdir)
+      (with-open-file (s file1 :direction :output) (write-string "test" s))
+      (with-open-file (s file2 :direction :output) (write-string "test" s))
+
+      (let ((results (agent-q.tools::search-files-recursively
+                      (namestring tmpdir) "*" '(".git"))))
+        (is (= 1 (length results)))
+        (is (search "real.txt" (first results)))))))
+
+;;; ============================================================================
 ;;; directory_tree Tool Tests
 ;;; ============================================================================
 ;;; ABOUTME: Tests for the directory_tree tool which shows recursive directory

@@ -153,6 +153,111 @@
                             child-name
                             (when child-size (format-file-size child-size)))))))))))
 
+(defun glob-matches-p (pattern filename)
+  "Check if FILENAME matches glob PATTERN.
+   Supports: * (any chars), ** (recursive), ? (single char)."
+  (cond
+    ;; Empty pattern protection
+    ((= (length pattern) 0)
+     (= (length filename) 0))
+
+    ;; Exact match (no wildcards)
+    ((not (or (find #\* pattern) (find #\? pattern)))
+     (string= pattern filename))
+
+    ;; Recursive wildcard **/*.ext
+    ;; Matches any path ending with suffix pattern
+    ;; Example: "**/*.lisp" matches "src/foo.lisp", "a/b/c.lisp", "test.lisp"
+    ((search "**/" pattern)
+     (let* ((pos (search "**/" pattern))
+            (suffix-pattern (subseq pattern (+ pos 3)))) ; Skip past "**/"
+       (and suffix-pattern
+            (> (length suffix-pattern) 0)
+            ;; Match suffix pattern against filename
+            ;; For simple patterns like *.ext, match against basename
+            ;; For complex patterns with /, match against full path
+            (if (not (find #\/ suffix-pattern))
+                ;; Simple pattern - match against basename
+                (glob-matches-p suffix-pattern
+                               (let ((slash-pos (position #\/ filename :from-end t)))
+                                 (if slash-pos
+                                     (subseq filename (1+ slash-pos))
+                                     filename)))
+                ;; Complex pattern - try matching against path tail
+                (and (>= (length filename) (length suffix-pattern))
+                     (glob-matches-p suffix-pattern
+                                    (subseq filename (- (length filename)
+                                                       (length suffix-pattern)))))))))
+
+    ;; Simple suffix match *.ext
+    ((and (> (length pattern) 0)
+          (char= (char pattern 0) #\*)
+          (not (find #\* pattern :start 1))
+          (not (find #\? pattern)))
+     (let ((suffix (subseq pattern 1)))
+       (and (>= (length filename) (length suffix))
+            (string= suffix filename :start2 (- (length filename) (length suffix))))))
+
+    ;; Simple prefix match prefix*
+    ((and (> (length pattern) 0)
+          (char= (char pattern (1- (length pattern))) #\*)
+          (not (find #\* pattern :end (1- (length pattern))))
+          (not (find #\? pattern)))
+     (let ((prefix (subseq pattern 0 (1- (length pattern)))))
+       (and (>= (length filename) (length prefix))
+            (string= prefix filename :end2 (length prefix)))))
+
+    ;; Question mark (single char)
+    ((find #\? pattern)
+     ;; Simple implementation: convert ? to . for basic matching
+     ;; Full regex implementation would be more complex
+     (and (= (length pattern) (length filename))
+          (every (lambda (pc fc)
+                  (or (char= pc #\?)
+                      (char= pc #\*)
+                      (char= pc fc)))
+                pattern filename)))
+
+    ;; Default: no match
+    (t nil)))
+
+(defun search-files-recursively (path pattern exclusions)
+  "Recursively search for files matching PATTERN under PATH.
+   Returns list of relative paths."
+  (let ((results '()))
+    (labels ((walk (dir prefix)
+               (handler-case
+                   (let ((entries (eval-in-emacs
+                                  `(let* ((dir ,dir)
+                                          (files (directory-files-and-attributes dir nil nil t)))
+                                     (cl-loop for (name . attrs) in files
+                                              unless (member name '("." "..") :test #'string=)
+                                              collect (list :name name
+                                                           :type (if (eq (file-attribute-type attrs) t)
+                                                                    :directory :file)))))))
+                     (dolist (entry entries)
+                       (let* ((name (getf entry :name))
+                              (type (getf entry :type))
+                              (rel-path (if prefix
+                                           (concatenate 'string prefix "/" name)
+                                           name)))
+                         ;; Skip if matches exclusion
+                         (unless (matches-exclusion-p name exclusions)
+                           (if (eq type :directory)
+                               ;; Recurse into subdirectory
+                               (walk (merge-pathnames
+                                     (concatenate 'string name "/")
+                                     dir)
+                                    rel-path)
+                               ;; Check if file matches pattern
+                               (when (glob-matches-p pattern rel-path)
+                                 (push rel-path results)))))))
+                 (error (e)
+                   ;; Silently skip directories we can't read
+                   nil))))
+      (walk path nil))
+    (nreverse results)))
+
 ;;; ============================================================================
 ;;; list_directory Tool
 ;;; ============================================================================
