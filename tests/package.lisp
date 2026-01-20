@@ -34,6 +34,7 @@
    #:diff-tool-tests
    #:tool-execution-pipeline-tests
    #:error-handling-tests
+   #:filesystem-tests
 
    ;; Test utilities
    #:find-tool-handler

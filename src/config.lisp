@@ -4,6 +4,10 @@
 
 ;;; Configuration variables
 
+(defvar *project-root* nil
+  "Root directory for file operations. Auto-detected if NIL.
+   All file system tools validate paths against this boundary.")
+
 (defparameter *default-provider* :anthropic
   "Default LLM provider. Options: :anthropic, :openai, :ollama, :openrouter")
 

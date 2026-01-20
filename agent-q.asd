@@ -48,6 +48,7 @@
                             (:file "core-tests")
                             (:file "session-tests")
                             (:file "phase2-tools-tests")
-                            (:file "phase2-integration-tests"))))
+                            (:file "phase2-integration-tests")
+                            (:file "filesystem-tests"))))
   :perform (test-op (op c)
              (uiop:symbol-call :agent-q-tests '#:run-agent-q-tests)))

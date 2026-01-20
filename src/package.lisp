@@ -10,6 +10,7 @@
                 #:tools-for-llm)
   (:export
    ;; Config
+   #:*project-root*
    #:*default-provider*
    #:*default-model*
    #:*provider-instance*
