@@ -89,3 +89,53 @@
                                (error (e)
                                  (format nil "Error listing directory: ~A" e)))))))))
   (register-tool *agent-q-registry* tool))
+
+;;; ============================================================================
+;;; get_file_info Tool
+;;; ============================================================================
+
+(let ((tool (define-tool
+              "get_file_info"
+              "Get detailed information about a file or directory including size, timestamps, and permissions."
+              '((:name "path" :type :string :description "File or directory path (relative to project root)"))
+              :required '("path")
+              :safety-level :safe
+              :categories '(:filesystem :navigation)
+              :handler (lambda (args)
+                         (block get-file-info-handler
+                           (let* ((path (gethash "path" args))
+                                  (resolved (agent-q::resolve-project-path path)))
+                             (unless resolved
+                               (return-from get-file-info-handler
+                                 (format nil "Error: Path '~A' is outside project root" path)))
+                             (handler-case
+                                 (let ((info (eval-in-emacs
+                                             `(let* ((path ,(namestring resolved))
+                                                     (attrs (file-attributes path)))
+                                                (when attrs
+                                                  (list :path path
+                                                       :type (if (eq (file-attribute-type attrs) t)
+                                                                :directory :file)
+                                                       :size (file-attribute-size attrs)
+                                                       :modified (format-time-string
+                                                                 "%Y-%m-%d %H:%M:%S"
+                                                                 (file-attribute-modification-time attrs))
+                                                       :accessed (format-time-string
+                                                                 "%Y-%m-%d %H:%M:%S"
+                                                                 (file-attribute-access-time attrs))
+                                                       :permissions (file-attribute-modes attrs)
+                                                       :readable (file-readable-p path)
+                                                       :writable (file-writable-p path)))))))
+                                   (if info
+                                       (with-output-to-string (s)
+                                         (format s "File: ~A~%~%" (getf info :path))
+                                         (format s "Type: ~A~%" (getf info :type))
+                                         (format s "Size: ~A~%" (format-file-size (getf info :size)))
+                                         (format s "Modified: ~A~%" (getf info :modified))
+                                         (format s "Accessed: ~A~%" (getf info :accessed))
+                                         (format s "Readable: ~A~%" (if (getf info :readable) "Yes" "No"))
+                                         (format s "Writable: ~A~%" (if (getf info :writable) "Yes" "No")))
+                                       (format nil "Error: File '~A' not found" path)))
+                               (error (e)
+                                 (format nil "Error getting file info: ~A" e)))))))))
+  (register-tool *agent-q-registry* tool))

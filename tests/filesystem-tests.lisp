@@ -135,3 +135,33 @@
   (let ((tool (find-tool-definition "list_directory")))
     (is (not (null tool)))
     (is (search "directory" (tool-description tool) :test #'char-equal))))
+
+;;; ============================================================================
+;;; get_file_info Tool Tests
+;;; ============================================================================
+;;; ABOUTME: Tests for the get_file_info tool which retrieves file metadata
+;;; (size, timestamps, permissions) within the project root boundary.
+
+(test get-file-info-tool-exists
+  "get_file_info tool should be registered"
+  (let ((tool (find-tool-definition "get_file_info")))
+    (is (not (null tool)))
+    (is (equal (tool-name tool) "get_file_info"))))
+
+(test get-file-info-is-safe
+  "get_file_info should have :safe safety level"
+  (let ((safe-tools (agent-q.tools:get-agent-q-tools :max-safety-level :safe)))
+    (is (find "get_file_info" safe-tools :test #'equal :key #'tool-name))))
+
+(test get-file-info-has-required-parameters
+  "get_file_info should require the path parameter"
+  (let ((tool (find-tool-definition "get_file_info")))
+    (is (not (null tool)))
+    (let ((required (tool-required tool)))
+      (is (member "path" required :test #'equal)))))
+
+(test get-file-info-has-description
+  "get_file_info should have a description mentioning file information"
+  (let ((tool (find-tool-definition "get_file_info")))
+    (is (not (null tool)))
+    (is (search "information" (tool-description tool) :test #'char-equal))))
