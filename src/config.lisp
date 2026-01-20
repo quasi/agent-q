@@ -104,3 +104,40 @@
 ;;; Configuration happens via:
 ;;; 1. cl-llm-provider:load-configuration-from-file (loads user config)
 ;;; 2. agent-q:sync-from-cl-llm-provider (syncs to agent-q)
+
+;;; ============================================================================
+;;; Project Root Auto-Detection
+;;; ============================================================================
+;;; ABOUTME: Functions to auto-detect the project root directory when
+;;; *project-root* is NIL. Uses multiple heuristics: git root, ASDF system,
+;;; SLYNK default directory, or current working directory.
+
+(defun find-git-root (start-dir)
+  "Walk up from START-DIR looking for .git directory.
+   Returns the directory containing .git, or NIL if not found."
+  (when start-dir
+    (let* ((truename (ignore-errors (truename start-dir)))
+           (dir (when truename (pathname-directory truename))))
+      (when dir
+        (loop for i from (length dir) downto 1
+              for parent = (make-pathname :directory (subseq dir 0 i)
+                                          :defaults truename)
+              when (probe-file (merge-pathnames ".git/" parent))
+              return parent)))))
+
+(defun detect-project-root ()
+  "Auto-detect project root using available heuristics.
+   Priority: 1. Git root, 2. ASDF system, 3. SLYNK default, 4. CWD"
+  (or
+   ;; 1. Git repository root
+   (find-git-root *default-pathname-defaults*)
+   ;; 2. ASDF system root (if agent-q loaded)
+   (ignore-errors (asdf:system-source-directory :agent-q))
+   ;; 3. SLY/SLYNK default directory
+   (let ((slynk (find-package :slynk)))
+     (when slynk
+       (let ((default-dir (find-symbol "DEFAULT-DIRECTORY" slynk)))
+         (when (and default-dir (fboundp default-dir))
+           (ignore-errors (funcall default-dir))))))
+   ;; 4. Current working directory
+   *default-pathname-defaults*))
