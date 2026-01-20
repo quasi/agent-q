@@ -139,3 +139,40 @@
                                (error (e)
                                  (format nil "Error getting file info: ~A" e)))))))))
   (register-tool *agent-q-registry* tool))
+
+;;; ============================================================================
+;;; get_project_root Tool
+;;; ============================================================================
+;;; ABOUTME: Reports the current project root directory and how it was detected.
+;;; Useful for the LLM to understand its working context and file boundaries.
+
+(let ((tool (define-tool
+              "get_project_root"
+              "Get the current project root directory and how it was determined.
+               The project root is the security boundary for all file operations."
+              '()
+              :required '()
+              :safety-level :safe
+              :categories '(:filesystem :configuration)
+              :handler (lambda (args)
+                         (declare (ignore args))
+                         (let* ((root (agent-q::ensure-project-root))
+                                (method (cond
+                                          ;; Check if explicitly configured
+                                          ((and (boundp 'agent-q:*project-root*)
+                                                (not (null (symbol-value 'agent-q:*project-root*)))
+                                                ;; Check if it was set before we called ensure-project-root
+                                                ;; by comparing to detect-project-root result
+                                                (not (equal root (agent-q::detect-project-root))))
+                                           "Explicitly configured")
+                                          ;; Check if from git root
+                                          ((agent-q::find-git-root *default-pathname-defaults*)
+                                           "Git repository root (.git directory)")
+                                          ;; Check if from ASDF
+                                          ((ignore-errors (asdf:system-source-directory :agent-q))
+                                           "ASDF system directory")
+                                          ;; Otherwise default
+                                          (t "Default directory"))))
+                           (format nil "Project root: ~A~%~%Detection method: ~A"
+                                   (namestring root) method))))))
+  (register-tool *agent-q-registry* tool))

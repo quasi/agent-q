@@ -165,3 +165,42 @@
   (let ((tool (find-tool-definition "get_file_info")))
     (is (not (null tool)))
     (is (search "information" (tool-description tool) :test #'char-equal))))
+
+;;; ============================================================================
+;;; get_project_root Tool Tests
+;;; ============================================================================
+;;; ABOUTME: Tests for the get_project_root tool which reports the current
+;;; project root directory and how it was detected.
+
+(test get-project-root-tool-exists
+  "get_project_root tool should be registered"
+  (let ((tool (find-tool-definition "get_project_root")))
+    (is (not (null tool)))
+    (is (equal (tool-name tool) "get_project_root"))))
+
+(test get-project-root-is-safe
+  "get_project_root should have :safe safety level"
+  (let ((safe-tools (agent-q.tools:get-agent-q-tools :max-safety-level :safe)))
+    (is (find "get_project_root" safe-tools :test #'equal :key #'tool-name))))
+
+(test get-project-root-has-no-required-parameters
+  "get_project_root should not require any parameters"
+  (let ((tool (find-tool-definition "get_project_root")))
+    (is (not (null tool)))
+    (let ((required (tool-required tool)))
+      (is (or (null required) (= 0 (length required)))))))
+
+(test get-project-root-returns-path
+  "get_project_root should return current project root"
+  (let ((handler (find-tool-handler "get_project_root")))
+    (is (not (null handler)))
+    (let ((result (funcall handler (make-hash-table :test 'equal))))
+      (is (stringp result))
+      (is (search "Project root" result)))))
+
+(test get-project-root-includes-detection-method
+  "get_project_root should include how the root was determined"
+  (let ((handler (find-tool-handler "get_project_root")))
+    (let ((result (funcall handler (make-hash-table :test 'equal))))
+      (is (stringp result))
+      (is (search "Detection method" result)))))
