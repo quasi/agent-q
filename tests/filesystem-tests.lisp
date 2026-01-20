@@ -280,6 +280,54 @@
         (is (search "Error" result))
         (is (search "outside project root" result))))))
 
+(test directory-tree-tool-basic
+  "Test directory_tree tool returns formatted tree"
+  (skip "Requires Emacs connection - integration test only")
+  (let ((agent-q:*project-root* (merge-pathnames "test-project/" (uiop:temporary-directory))))
+    (unwind-protect
+         (progn
+           ;; Setup test structure
+           (ensure-directories-exist (merge-pathnames "src/" agent-q:*project-root*))
+           (ensure-directories-exist (merge-pathnames "tests/" agent-q:*project-root*))
+           (with-open-file (s (merge-pathnames "src/main.lisp" agent-q:*project-root*)
+                              :direction :output)
+             (write-string "(defun test ())" s))
+
+           (let* ((tool (agent-q.tools::find-tool-definition "directory_tree"))
+                  (args (make-hash-table :test 'equal)))
+             (setf (gethash "path" args) ".")
+             (let ((result (funcall (agent-q.tools::tool-handler tool) args)))
+               (is (stringp result))
+               (is (search "[DIR]" result))
+               (is (search "src" result))
+               (is (search "tests" result)))))
+      ;; Cleanup
+      (uiop:delete-directory-tree agent-q:*project-root* :validate t :if-does-not-exist :ignore))))
+
+(test directory-tree-tool-with-exclusions
+  "Test directory_tree excludes patterns"
+  (skip "Requires Emacs connection - integration test only")
+  (let ((agent-q:*project-root* (merge-pathnames "test-project/" (uiop:temporary-directory))))
+    (unwind-protect
+         (progn
+           ;; Setup with .git directory
+           (ensure-directories-exist (merge-pathnames ".git/" agent-q:*project-root*))
+           (ensure-directories-exist (merge-pathnames "src/" agent-q:*project-root*))
+           (with-open-file (s (merge-pathnames "code.fasl" agent-q:*project-root*)
+                              :direction :output)
+             (write-string "binary" s))
+
+           (let* ((tool (agent-q.tools::find-tool-definition "directory_tree"))
+                  (args (make-hash-table :test 'equal)))
+             (setf (gethash "path" args) ".")
+             (setf (gethash "exclude_patterns" args) (list ".git" "*.fasl"))
+             (let ((result (funcall (agent-q.tools::tool-handler tool) args)))
+               (is (not (search ".git" result)))
+               (is (not (search "code.fasl" result)))
+               (is (search "src" result)))))
+      ;; Cleanup
+      (uiop:delete-directory-tree agent-q:*project-root* :validate t :if-does-not-exist :ignore))))
+
 ;;; ============================================================================
 ;;; list_directory Tool Tests
 ;;; ============================================================================
