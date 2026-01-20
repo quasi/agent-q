@@ -59,7 +59,12 @@
                       "")))))))
 
 (defun matches-exclusion-p (name exclusions)
-  "Check if NAME matches any glob pattern in EXCLUSIONS."
+  "Check if NAME matches any glob pattern in EXCLUSIONS.
+   Supported patterns:
+     - Exact match: \"node_modules\", \".git\"
+     - Suffix match: \"*.fasl\", \"*.o\"
+     - Prefix match: \"temp*\", \"TODO*\"
+     - Match all: \"*\" (matches everything, use with caution)"
   (when exclusions
     (some (lambda (pattern)
             (cond
