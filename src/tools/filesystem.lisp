@@ -598,6 +598,232 @@
       (t nil))))
 
 ;;; ============================================================================
+;;; create_file Tool
+;;; ============================================================================
+;;; ABOUTME: Create new files with content. Prevents overwriting existing files
+;;; unless explicitly requested. Creates parent directories if needed.
+
+(let ((tool (define-tool
+              "create_file"
+              "Create a new file with the specified content. By default, fails if file exists.
+               Use allow_overwrite to replace existing files.
+               WARNING: This creates files. Changes are logged."
+              '((:name "path" :type :string :description "File path (relative to project root)")
+                (:name "content" :type :string :description "File content to write")
+                (:name "allow_overwrite" :type :boolean :description "Allow overwriting existing file (default: false)")
+                (:name "create_parents" :type :boolean :description "Create parent directories if needed (default: true)")
+                (:name "description" :type :string :description "What this file is for (for logging)"))
+              :required '("path" "content")
+              :safety-level :moderate
+              :categories '(:filesystem :editing)
+              :handler (lambda (args)
+                         (block create-file-handler
+                           (let* ((path (gethash "path" args))
+                                  (content (gethash "content" args))
+                                  (allow-overwrite (gethash "allow_overwrite" args))
+                                  (create-parents (if (nth-value 1 (gethash "create_parents" args))
+                                                     (gethash "create_parents" args)
+                                                     t)) ; Default to true
+                                  (description (gethash "description" args))
+                                  (resolved (agent-q::resolve-project-path path)))
+
+                             ;; Validate path
+                             (unless resolved
+                               (return-from create-file-handler
+                                 (format nil "Error: Path '~A' is outside project root" path)))
+
+                             (handler-case
+                                 (progn
+                                   ;; Check if file exists
+                                   (let ((exists (eval-in-emacs
+                                                 `(file-exists-p ,(namestring resolved)))))
+                                     (when (and exists (not allow-overwrite))
+                                       (return-from create-file-handler
+                                         (format nil "Error: File '~A' already exists.~%~%~
+                                                     Use allow_overwrite: true to replace it."
+                                                path))))
+
+                                   ;; Create parent directories if needed
+                                   (when create-parents
+                                     (let ((parent-dir (directory-namestring resolved)))
+                                       (eval-in-emacs
+                                        `(make-directory ,parent-dir t))))
+
+                                   ;; Write the file
+                                   (write-file-content (namestring resolved) content)
+
+                                   ;; Return confirmation
+                                   (with-output-to-string (s)
+                                     (format s "✓ Created file: ~A~%" path)
+                                     (when description
+                                       (format s "~%Purpose: ~A~%" description))
+                                     (format s "~%Content size: ~A~%"
+                                            (format-file-size (length content)))
+                                     (let ((lines (1+ (count #\Newline content))))
+                                       (format s "Lines: ~D~%" lines))))
+
+                               (error (e)
+                                 (format nil "Error creating file: ~A" e)))))))))
+  (register-tool *agent-q-registry* tool))
+
+;;; ============================================================================
+;;; move_file Tool
+;;; ============================================================================
+;;; ABOUTME: Move or rename files within the project. Prevents overwriting
+;;; existing files unless explicitly requested. Updates open Emacs buffers.
+
+(let ((tool (define-tool
+              "move_file"
+              "Move or rename a file. By default, fails if destination exists.
+               Use allow_overwrite to replace existing files.
+               WARNING: This moves files. Changes are logged."
+              '((:name "source" :type :string :description "Source file path (relative to project root)")
+                (:name "destination" :type :string :description "Destination file path (relative to project root)")
+                (:name "allow_overwrite" :type :boolean :description "Allow overwriting existing file (default: false)")
+                (:name "create_parents" :type :boolean :description "Create parent directories if needed (default: true)")
+                (:name "description" :type :string :description "Why this file is being moved (for logging)"))
+              :required '("source" "destination")
+              :safety-level :moderate
+              :categories '(:filesystem :editing)
+              :handler (lambda (args)
+                         (block move-file-handler
+                           (let* ((source (gethash "source" args))
+                                  (destination (gethash "destination" args))
+                                  (allow-overwrite (gethash "allow_overwrite" args))
+                                  (create-parents (if (nth-value 1 (gethash "create_parents" args))
+                                                     (gethash "create_parents" args)
+                                                     t)) ; Default to true
+                                  (description (gethash "description" args))
+                                  (resolved-source (agent-q::resolve-project-path source))
+                                  (resolved-dest (agent-q::resolve-project-path destination)))
+
+                             ;; Validate both paths
+                             (unless resolved-source
+                               (return-from move-file-handler
+                                 (format nil "Error: Source path '~A' is outside project root" source)))
+
+                             (unless resolved-dest
+                               (return-from move-file-handler
+                                 (format nil "Error: Destination path '~A' is outside project root" destination)))
+
+                             (handler-case
+                                 (progn
+                                   ;; Check if source exists
+                                   (let ((source-exists (eval-in-emacs
+                                                        `(file-exists-p ,(namestring resolved-source)))))
+                                     (unless source-exists
+                                       (return-from move-file-handler
+                                         (format nil "Error: Source file '~A' does not exist" source))))
+
+                                   ;; Check if destination exists
+                                   (let ((dest-exists (eval-in-emacs
+                                                      `(file-exists-p ,(namestring resolved-dest)))))
+                                     (when (and dest-exists (not allow-overwrite))
+                                       (return-from move-file-handler
+                                         (format nil "Error: Destination file '~A' already exists.~%~%~
+                                                     Use allow_overwrite: true to replace it."
+                                                destination))))
+
+                                   ;; Create parent directories if needed
+                                   (when create-parents
+                                     (let ((parent-dir (directory-namestring resolved-dest)))
+                                       (eval-in-emacs
+                                        `(make-directory ,parent-dir t))))
+
+                                   ;; Perform the move/rename (Emacs handles buffer updates)
+                                   (eval-in-emacs
+                                    `(let ((old-buf (find-buffer-visiting ,(namestring resolved-source))))
+                                       (rename-file ,(namestring resolved-source)
+                                                   ,(namestring resolved-dest)
+                                                   ,allow-overwrite)
+                                       ;; Update buffer if file was open
+                                       (when old-buf
+                                         (with-current-buffer old-buf
+                                           (set-visited-file-name ,(namestring resolved-dest))
+                                           (set-buffer-modified-p nil)))
+                                       t))
+
+                                   ;; Return confirmation
+                                   (with-output-to-string (s)
+                                     (format s "✓ Moved: ~A → ~A~%" source destination)
+                                     (when description
+                                       (format s "~%Reason: ~A~%" description))))
+
+                               (error (e)
+                                 (format nil "Error moving file: ~A" e)))))))))
+  (register-tool *agent-q-registry* tool))
+
+;;; ============================================================================
+;;; delete_file Tool
+;;; ============================================================================
+;;; ABOUTME: Delete files within the project. Requires confirmation by default
+;;; to prevent accidental deletions. Closes associated Emacs buffers.
+
+(let ((tool (define-tool
+              "delete_file"
+              "Delete a file from the project. This operation cannot be undone.
+               WARNING: This permanently deletes files. Use with caution."
+              '((:name "path" :type :string :description "File path to delete (relative to project root)")
+                (:name "description" :type :string :description "Why this file is being deleted (for logging)"))
+              :required '("path")
+              :safety-level :moderate
+              :categories '(:filesystem :editing)
+              :handler (lambda (args)
+                         (block delete-file-handler
+                           (let* ((path (gethash "path" args))
+                                  (description (gethash "description" args))
+                                  (resolved (agent-q::resolve-project-path path)))
+
+                             ;; Validate path
+                             (unless resolved
+                               (return-from delete-file-handler
+                                 (format nil "Error: Path '~A' is outside project root" path)))
+
+                             (handler-case
+                                 (progn
+                                   ;; Check if file exists
+                                   (let ((exists (eval-in-emacs
+                                                 `(file-exists-p ,(namestring resolved)))))
+                                     (unless exists
+                                       (return-from delete-file-handler
+                                         (format nil "Error: File '~A' does not exist" path))))
+
+                                   ;; Check if it's a directory
+                                   (let ((is-dir (eval-in-emacs
+                                                 `(file-directory-p ,(namestring resolved)))))
+                                     (when is-dir
+                                       (return-from delete-file-handler
+                                         (format nil "Error: '~A' is a directory. Use a directory deletion tool instead." path))))
+
+                                   ;; Get file info before deletion (for logging)
+                                   (let ((file-size (eval-in-emacs
+                                                    `(let ((attrs (file-attributes ,(namestring resolved))))
+                                                       (when attrs
+                                                         (file-attribute-size attrs))))))
+
+                                     ;; Delete the file (Emacs handles buffer cleanup)
+                                     (eval-in-emacs
+                                      `(let ((buf (find-buffer-visiting ,(namestring resolved))))
+                                         ;; Delete the file
+                                         (delete-file ,(namestring resolved))
+                                         ;; Kill associated buffer if exists
+                                         (when buf
+                                           (kill-buffer buf))
+                                         t))
+
+                                     ;; Return confirmation
+                                     (with-output-to-string (s)
+                                       (format s "✓ Deleted: ~A~%" path)
+                                       (when description
+                                         (format s "~%Reason: ~A~%" description))
+                                       (when file-size
+                                         (format s "~%Size freed: ~A~%" (format-file-size file-size))))))
+
+                               (error (e)
+                                 (format nil "Error deleting file: ~A" e)))))))))
+  (register-tool *agent-q-registry* tool))
+
+;;; ============================================================================
 ;;; insert_at_line Tool
 ;;; ============================================================================
 

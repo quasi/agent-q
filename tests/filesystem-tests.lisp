@@ -760,6 +760,224 @@ def bar"))))
       (is (search "outside project root" result)))))
 
 ;;; ============================================================================
+;;; create_file Tool Tests
+;;; ============================================================================
+;;; ABOUTME: Tests for the create_file tool which creates new files with content.
+;;; Prevents accidental overwrites and creates parent directories as needed.
+
+(test create-file-tool-exists
+  "create_file tool should be registered"
+  ;; create_file is :moderate, need to query with that safety level
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "create_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (is (equal (tool-name tool) "create_file"))))
+
+(test create-file-is-moderate
+  "create_file should have :moderate safety level (not :safe)"
+  ;; Should appear with :moderate level but not :safe
+  (let ((moderate-tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+        (safe-tools (agent-q.tools:get-agent-q-tools :max-safety-level :safe)))
+    (is (find "create_file" moderate-tools :test #'equal :key #'tool-name))
+    (is (not (find "create_file" safe-tools :test #'equal :key #'tool-name)))))
+
+(test create-file-has-required-parameters
+  "create_file should require path and content"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "create_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (let ((required (tool-required-params tool)))
+      (is (member "path" required :test #'equal))
+      (is (member "content" required :test #'equal)))))
+
+(test create-file-has-optional-parameters
+  "create_file should have optional allow_overwrite and create_parents parameters"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "create_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (let ((params (tool-parameters tool)))
+      (is (find-if (lambda (p) (string= "allow_overwrite" (getf p :name))) params))
+      (is (find-if (lambda (p) (string= "create_parents" (getf p :name))) params))
+      (is (find-if (lambda (p) (string= "description" (getf p :name))) params)))))
+
+(test create-file-has-description
+  "create_file should have a description mentioning file creation"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "create_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (is (search "create" (tool-description tool) :test #'char-equal))))
+
+(test create-file-path-validation
+  "create_file rejects paths outside project root"
+  (skip "Requires Emacs connection")
+  (let* ((tool (find-tool-definition "create_file"))
+         (handler (tool-handler tool))
+         (args (make-hash-table :test 'equal)))
+    (setf (gethash "path" args) "../../etc/malicious.txt")
+    (setf (gethash "content" args) "evil content")
+    (let ((result (funcall handler args)))
+      (is (search "outside project root" result)))))
+
+(test create-file-categories
+  "create_file should be in :filesystem and :editing categories"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "create_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (let ((categories (slot-value tool 'cl-llm-provider::categories)))
+      (is (member :filesystem categories))
+      (is (member :editing categories)))))
+
+;;; ============================================================================
+;;; move_file Tool Tests
+;;; ============================================================================
+;;; ABOUTME: Tests for the move_file tool which moves/renames files within
+;;; the project. Validates both source and destination paths.
+
+(test move-file-tool-exists
+  "move_file tool should be registered"
+  ;; move_file is :moderate, need to query with that safety level
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "move_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (is (equal (tool-name tool) "move_file"))))
+
+(test move-file-is-moderate
+  "move_file should have :moderate safety level (not :safe)"
+  ;; Should appear with :moderate level but not :safe
+  (let ((moderate-tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+        (safe-tools (agent-q.tools:get-agent-q-tools :max-safety-level :safe)))
+    (is (find "move_file" moderate-tools :test #'equal :key #'tool-name))
+    (is (not (find "move_file" safe-tools :test #'equal :key #'tool-name)))))
+
+(test move-file-has-required-parameters
+  "move_file should require source and destination"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "move_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (let ((required (tool-required-params tool)))
+      (is (member "source" required :test #'equal))
+      (is (member "destination" required :test #'equal)))))
+
+(test move-file-has-optional-parameters
+  "move_file should have optional allow_overwrite and create_parents parameters"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "move_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (let ((params (tool-parameters tool)))
+      (is (find-if (lambda (p) (string= "allow_overwrite" (getf p :name))) params))
+      (is (find-if (lambda (p) (string= "create_parents" (getf p :name))) params))
+      (is (find-if (lambda (p) (string= "description" (getf p :name))) params)))))
+
+(test move-file-has-description
+  "move_file should have a description mentioning move/rename"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "move_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (is (search "move" (tool-description tool) :test #'char-equal))))
+
+(test move-file-source-path-validation
+  "move_file rejects source paths outside project root"
+  (skip "Requires Emacs connection")
+  (let* ((tool (find-tool-definition "move_file"))
+         (handler (tool-handler tool))
+         (args (make-hash-table :test 'equal)))
+    (setf (gethash "source" args) "../../etc/passwd")
+    (setf (gethash "destination" args) "safe-dest.txt")
+    (let ((result (funcall handler args)))
+      (is (search "outside project root" result)))))
+
+(test move-file-dest-path-validation
+  "move_file rejects destination paths outside project root"
+  (skip "Requires Emacs connection")
+  (let* ((tool (find-tool-definition "move_file"))
+         (handler (tool-handler tool))
+         (args (make-hash-table :test 'equal)))
+    (setf (gethash "source" args) "src/test.lisp")
+    (setf (gethash "destination" args) "../../etc/malicious.txt")
+    (let ((result (funcall handler args)))
+      (is (search "outside project root" result)))))
+
+(test move-file-categories
+  "move_file should be in :filesystem and :editing categories"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "move_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (let ((categories (slot-value tool 'cl-llm-provider::categories)))
+      (is (member :filesystem categories))
+      (is (member :editing categories)))))
+
+;;; ============================================================================
+;;; delete_file Tool Tests
+;;; ============================================================================
+;;; ABOUTME: Tests for the delete_file tool which permanently deletes files.
+;;; This is a destructive operation that requires careful validation.
+
+(test delete-file-tool-exists
+  "delete_file tool should be registered"
+  ;; delete_file is :moderate, need to query with that safety level
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "delete_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (is (equal (tool-name tool) "delete_file"))))
+
+(test delete-file-is-moderate
+  "delete_file should have :moderate safety level (not :safe)"
+  ;; Should appear with :moderate level but not :safe
+  (let ((moderate-tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+        (safe-tools (agent-q.tools:get-agent-q-tools :max-safety-level :safe)))
+    (is (find "delete_file" moderate-tools :test #'equal :key #'tool-name))
+    (is (not (find "delete_file" safe-tools :test #'equal :key #'tool-name)))))
+
+(test delete-file-has-required-parameters
+  "delete_file should require path parameter"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "delete_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (let ((required (tool-required-params tool)))
+      (is (member "path" required :test #'equal)))))
+
+(test delete-file-has-optional-parameters
+  "delete_file should have optional description parameter"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "delete_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (let ((params (tool-parameters tool)))
+      (is (find-if (lambda (p) (string= "description" (getf p :name))) params)))))
+
+(test delete-file-has-description
+  "delete_file should have a description mentioning deletion"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "delete_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (is (search "delete" (tool-description tool) :test #'char-equal))))
+
+(test delete-file-has-warning
+  "delete_file description should mention it's permanent/dangerous"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "delete_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (is (search "warning" (tool-description tool) :test #'char-equal))))
+
+(test delete-file-path-validation
+  "delete_file rejects paths outside project root"
+  (skip "Requires Emacs connection")
+  (let* ((tool (find-tool-definition "delete_file"))
+         (handler (tool-handler tool))
+         (args (make-hash-table :test 'equal)))
+    (setf (gethash "path" args) "../../etc/passwd")
+    (let ((result (funcall handler args)))
+      (is (search "outside project root" result)))))
+
+(test delete-file-categories
+  "delete_file should be in :filesystem and :editing categories"
+  (let* ((tools (agent-q.tools:get-agent-q-tools :max-safety-level :moderate))
+         (tool (find "delete_file" tools :test #'equal :key #'tool-name)))
+    (is (not (null tool)))
+    (let ((categories (slot-value tool 'cl-llm-provider::categories)))
+      (is (member :filesystem categories))
+      (is (member :editing categories)))))
+
+;;; ============================================================================
 ;;; Test Runner
 ;;; ============================================================================
 
