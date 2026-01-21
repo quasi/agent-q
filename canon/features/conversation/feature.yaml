@@ -1,0 +1,199 @@
+# Conversation Feature
+# Extracted from code: src/conversation.lisp
+# Status: Complete (code-only, now formalized)
+# Confidence: 0.90
+
+feature:
+  name: conversation
+  version: 1.0.0
+  status: complete
+  confidence: 0.90
+  triangulation: code_only
+  phase: 1
+
+  description: |
+    Multi-turn conversation management with message history and role tracking.
+    Provides the core conversation abstraction that wraps a sequence of messages
+    with associated context manager. Supports 4 message roles (system, user,
+    assistant, debug) and maintains chronological message ordering.
+
+    Foundation for session management - sessions persist conversations to disk.
+
+metadata:
+  primary_files:
+    - src/conversation.lisp  # 75 lines
+
+  specification:
+    - specs/PHASE-1-SPEC.md  # Original Phase 1 specification
+
+  tests:
+    # No dedicated tests - tested via integration (session tests)
+    common_lisp: 0
+    emacs_lisp: 0
+    coverage: "Tested via session integration tests"
+
+  dependencies:
+    internal:
+      - context-management  # Conversation has-a context-manager
+    external:
+      - None  # Pure CL, no external dependencies
+
+inventory:
+  classes:
+    - name: message
+      description: "Single message with role, content, timestamp"
+      slots: 3
+      roles: [:system, :user, :assistant, :debug]
+
+    - name: conversation
+      description: "Collection of messages with context manager"
+      slots: 5
+      id_format: "conv-N (monotonic counter)"
+
+  functions:
+    - name: make-message
+      type: constructor
+      params: [role, content]
+      returns: message
+
+    - name: new-conversation
+      type: constructor
+      params: [:project (optional)]
+      returns: conversation
+
+    - name: add-message
+      type: method
+      params: [conversation, role, content]
+      returns: message
+      description: "Append message to conversation history"
+
+    - name: get-messages
+      type: method
+      params: [conversation, :limit (optional)]
+      returns: list-of-messages
+      description: "Retrieve messages, optionally limited to last N"
+
+    - name: clear-conversation
+      type: method
+      params: [conversation]
+      returns: nil
+      description: "Clear all messages, preserve context manager"
+
+architecture:
+  message_roles:
+    system: "System instructions/prompts"
+    user: "User messages"
+    assistant: "LLM responses"
+    debug: "Debug/diagnostic messages (undocumented, internal)"
+
+  message_structure:
+    role: "(member :system :user :assistant :debug)"
+    content: "string"
+    timestamp: "universal-time (immutable)"
+
+  conversation_structure:
+    id: "string (conv-N, monotonic)"
+    messages: "list (append-only, chronological)"
+    context-manager: "context-manager instance (50-item window)"
+    created-at: "universal-time (immutable)"
+    project: "string or nil (optional identifier)"
+
+  design_patterns:
+    - "Append-only messages (no deletion, no modification)"
+    - "Monotonic IDs via global counter"
+    - "Context manager integration (single ownership)"
+    - "Optional project association for persistence"
+
+contracts:
+  count: 3
+  list:
+    - name: message-creation
+      description: "Make message with role and content"
+      status: implicit (no formal contract file)
+
+    - name: conversation-crud
+      description: "Create, add messages, retrieve, clear"
+      status: implicit (no formal contract file)
+
+    - name: message-retrieval
+      description: "Get messages with optional limit"
+      status: implicit (no formal contract file)
+
+properties:
+  count: 4
+  list:
+    - name: append-only-messages
+      description: "Messages never modified or deleted individually"
+      status: implicit (no formal property file)
+
+    - name: chronological-ordering
+      description: "Messages ordered by append time"
+      status: implicit (no formal property file)
+
+    - name: monotonic-ids
+      description: "Conversation IDs increment globally (conv-1, conv-2, ...)"
+      status: implicit (no formal property file)
+
+    - name: role-validation
+      description: "Message role must be one of 4 fixed values"
+      status: implicit (no formal property file)
+
+scenarios:
+  count: 3
+  list:
+    - name: create-conversation
+      description: "Initialize new conversation with context manager"
+      status: implicit (no formal scenario file)
+
+    - name: multi-turn-dialogue
+      description: "Add alternating user/assistant messages"
+      status: implicit (no formal scenario file)
+
+    - name: retrieve-recent-messages
+      description: "Get last N messages for context window"
+      status: implicit (no formal scenario file)
+
+quality_metrics:
+  code_quality: excellent
+  test_coverage: indirect (via session tests)
+  api_stability: stable
+  documentation: good (ABOUTME comments)
+
+known_gaps:
+  - "No formal contracts written"
+  - "No formal properties documented"
+  - "No formal scenarios"
+  - ":debug role undocumented (purpose unclear)"
+  - "No direct unit tests (tested via sessions)"
+  - "No message editing capability (append-only may be limiting)"
+  - "Global *conversation-id-counter* not thread-safe"
+
+related_features:
+  - context-management  # Conversation owns context-manager
+  - session-management  # Session wraps conversation
+  - chat-interface      # UI adds messages via RPC
+
+dependencies:
+  - feature: context-management
+    reason: "Conversation has-a context-manager"
+
+dependents:
+  - session-management  # Sessions persist conversations
+
+notes: |
+  This feature provides the core abstraction for multi-turn dialogue.
+  It's intentionally simple - just messages + context, no LLM integration.
+
+  Key design decisions:
+  1. **Append-only**: Messages never modified (audit trail)
+  2. **Context ownership**: Each conversation owns its context manager
+  3. **4 roles**: system, user, assistant, debug (debug undocumented)
+  4. **Optional project**: For session organization
+  5. **Monotonic IDs**: Global counter ensures uniqueness
+
+  **Integration**:
+  - Sessions serialize conversations to disk
+  - Agent uses conversation for LLM message history
+  - Chat UI displays conversation messages
+
+  **Confidence**: 0.90 (code-only, but straightforward and tested via integration)

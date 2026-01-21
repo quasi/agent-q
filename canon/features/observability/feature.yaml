@@ -1,0 +1,304 @@
+# Observability Feature
+# Extracted from code: src/observability.lisp
+# Status: Complete (code-only, now formalized)
+# Confidence: 0.70
+
+feature:
+  name: observability
+  version: 1.0.0
+  status: complete
+  confidence: 0.70
+  triangulation: code_only
+  phase: 3
+
+  description: |
+    Logging hooks and metrics collection for LLM interactions.
+    Integrates with cl-llm-provider's observability system to track all
+    requests/responses flowing through Agent-Q. Provides chronological
+    request logging, statistics aggregation, and configurable output.
+
+    Supports three observability levels (debug, info, warn) and optional
+    file logging. Tracks timing, token usage, and per-model statistics.
+
+metadata:
+  primary_files:
+    - src/observability.lisp  # 287 lines
+
+  specification:
+    - specs/plans/2026-01-13-streaming-observability-upgrade.md  # Implementation plan
+
+  tests:
+    common_lisp: 0
+    emacs_lisp: 0
+    coverage: "No automated tests"
+
+  dependencies:
+    internal:
+      - None  # Pure observability layer, no Agent-Q dependencies
+    external:
+      - cl-llm-provider  # Hooks API (make-logging-hooks, add-hook, *global-hooks*)
+
+inventory:
+  global_variables:
+    - name: "*agent-q-hooks*"
+      type: "hooks structure or nil"
+      description: "Agent-Q's hook configuration"
+      lifecycle: "Created by setup-observability, cleared by teardown"
+
+    - name: "*request-log*"
+      type: "list of plists"
+      description: "Chronological log of requests and responses"
+      entry_format: "(:timestamp T :event :request/:response :provider P :model M ...)"
+
+    - name: "*observability-level*"
+      type: "(member :debug :info :warn)"
+      description: "Current logging verbosity level"
+      default: ":info"
+
+    - name: "*observability-stream*"
+      type: "file-stream or nil"
+      description: "Log file stream when logging to file"
+      default: "nil (use *standard-output*)"
+
+  functions:
+    setup:
+      - name: setup-observability
+        params: [:level (optional), :log-to-file (optional)]
+        returns: hooks-structure
+        description: "Configure and install observability hooks"
+
+      - name: teardown-observability
+        params: []
+        returns: t
+        description: "Disable observability, cleanup resources"
+
+    logging:
+      - name: clear-request-log
+        params: []
+        returns: count-cleared
+        description: "Clear request log, return number of entries removed"
+
+      - name: get-request-log
+        params: [:limit (optional), :event-type (optional)]
+        returns: list-of-entries
+        description: "Retrieve log entries, most recent first"
+
+    statistics:
+      - name: get-request-stats
+        params: []
+        returns: stats-plist
+        description: "Aggregate statistics across all requests"
+        stats: [:total-requests, :total-tokens, :avg-timing, :total-timing]
+
+      - name: get-model-stats
+        params: []
+        returns: alist-of-model-stats
+        description: "Per-model request counts, tokens, timing"
+
+      - name: format-stats
+        params: [:stream (optional)]
+        returns: nil
+        description: "Print formatted statistics summary"
+
+      - name: get-observability-info
+        params: []
+        returns: config-plist
+        description: "Current observability configuration"
+        info: [:level, :hooks-active, :log-to-file, :log-entries]
+
+architecture:
+  observability_levels:
+    debug:
+      description: "Log full message contents and detailed responses"
+      verbosity: high
+      performance_impact: moderate
+
+    info:
+      description: "Log request/response summaries with timing and tokens"
+      verbosity: medium
+      performance_impact: low
+
+    warn:
+      description: "Log only errors and warnings"
+      verbosity: low
+      performance_impact: minimal
+
+  hook_integration:
+    base_hooks:
+      source: "cl-llm-provider:make-logging-hooks"
+      output: "*standard-output* or log file"
+      level: "Passed through to provider"
+
+    custom_before_request:
+      trigger: "Before LLM request sent"
+      action: "Log to *request-log*"
+      data: [:timestamp, :event=:request, :provider, :model, :message-count]
+
+    custom_after_response:
+      trigger: "After LLM response received"
+      action: "Log to *request-log* with metrics"
+      data: [:timestamp, :event=:response, :provider, :model, :timing, :tokens, :prompt-tokens, :completion-tokens]
+
+  request_log_structure:
+    request_entry:
+      timestamp: "universal-time"
+      event: ":request"
+      provider: "provider-type (e.g., :anthropic)"
+      model: "model string"
+      message_count: "number of messages"
+
+    response_entry:
+      timestamp: "universal-time"
+      event: ":response"
+      provider: "provider-type"
+      model: "model string"
+      timing: "seconds (float)"
+      tokens: "total tokens used"
+      prompt_tokens: "input tokens"
+      completion_tokens: "output tokens"
+
+  statistics_computation:
+    aggregation:
+      - "Sum tokens across all responses"
+      - "Average timing across all responses"
+      - "Count requests by model"
+
+    per_model:
+      - "Request count per model"
+      - "Total tokens per model"
+      - "Average timing per model"
+
+contracts:
+  count: 5
+  list:
+    - name: setup-observability
+      description: "Initialize hooks and install globally"
+      status: implicit
+
+    - name: request-logging
+      description: "Log request/response events to *request-log*"
+      status: implicit
+
+    - name: statistics-aggregation
+      description: "Compute aggregate and per-model statistics"
+      status: implicit
+
+    - name: log-management
+      description: "Clear, retrieve, filter request log"
+      status: implicit
+
+    - name: teardown-observability
+      description: "Cleanup hooks and close log files"
+      status: implicit
+
+properties:
+  count: 4
+  list:
+    - name: chronological-logging
+      description: "Log entries ordered by timestamp (most recent first)"
+      status: implicit
+
+    - name: hook-lifecycle
+      description: "Setup installs globally, teardown removes"
+      status: implicit
+
+    - name: file-stream-safety
+      description: "Teardown closes open file streams"
+      status: implicit
+
+    - name: statistics-consistency
+      description: "Stats computed from actual logged responses"
+      status: implicit
+
+scenarios:
+  count: 4
+  list:
+    - name: enable-info-logging
+      description: "Setup with :info level to stdout"
+      status: implicit
+
+    - name: enable-debug-logging-to-file
+      description: "Setup with :debug level, write to file"
+      status: implicit
+
+    - name: query-statistics
+      description: "Get aggregate and per-model stats"
+      status: implicit
+
+    - name: disable-observability
+      description: "Teardown to stop logging"
+      status: implicit
+
+quality_metrics:
+  code_quality: excellent
+  test_coverage: none (no automated tests)
+  api_design: very_good (clear separation of concerns)
+  documentation: excellent (detailed docstrings)
+
+known_gaps:
+  - "No formal contracts written"
+  - "No formal properties documented"
+  - "No formal scenarios"
+  - "No automated tests at all"
+  - "No log rotation for file logging (files grow unbounded)"
+  - "No structured logging format (just plists)"
+  - "No filtering by provider or time range"
+  - "No export functionality (e.g., to JSON/CSV)"
+  - "Log is in-memory only (lost on restart)"
+  - "*request-log* grows unbounded (no size limit)"
+
+related_features:
+  - cost-estimation  # Uses *request-log* for session cost calculation
+  - streaming        # Could log streaming events
+
+dependencies:
+  - external: cl-llm-provider
+    reason: "Hooks API (make-logging-hooks, add-hook)"
+
+dependents:
+  - cost-estimation  # Reads *request-log* for token usage
+
+design_decisions:
+  - decision: "Use cl-llm-provider:*global-hooks*"
+    rationale: "Centralized hook point, all requests logged automatically"
+
+  - decision: "Two-phase logging (base + custom hooks)"
+    rationale: "Base hooks handle output, custom hooks populate *request-log*"
+
+  - decision: "In-memory *request-log*"
+    rationale: "Simple, fast, sufficient for session duration"
+    tradeoff: "Lost on restart, grows unbounded"
+
+  - decision: "Separate :before-request and :after-response hooks"
+    rationale: "Captures request and response independently for timing"
+
+  - decision: "Plist log entries"
+    rationale: "Flexible, easy to extend with new fields"
+    tradeoff: "No schema enforcement, harder to query"
+
+notes: |
+  This feature provides comprehensive observability for Agent-Q's LLM
+  interactions. It's designed to be unobtrusive - you can enable/disable
+  it without affecting core functionality.
+
+  **Key capabilities**:
+  1. **Request logging**: Every request/response logged with timestamp
+  2. **Statistics**: Aggregate and per-model metrics (tokens, timing)
+  3. **File logging**: Optional persistent logging to disk
+  4. **Three levels**: debug (verbose), info (summaries), warn (errors only)
+
+  **Integration**:
+  - Setup once at agent initialization: `(setup-observability :level :info)`
+  - Hooks automatically log all cl-llm-provider requests
+  - Cost-estimation feature reads *request-log* for session costs
+
+  **Typical flow**:
+  ```
+  (setup-observability :level :info :log-to-file #p"~/agent-q.log")
+  ;; ... agent runs, requests logged ...
+  (get-request-stats)  ;; => (:TOTAL-REQUESTS 10 :TOTAL-TOKENS 5000 ...)
+  (format-stats)       ;; Prints formatted summary
+  (teardown-observability)  ;; Cleanup
+  ```
+
+  **Confidence**: 0.70 (code-only, works well but lacks tests and formal spec)
