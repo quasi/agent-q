@@ -392,7 +392,7 @@
               "Get a recursive directory tree showing the hierarchical structure.
                Useful for understanding project layout. Can exclude patterns like .git, *.fasl."
               '((:name "path" :type :string :description "Directory path (relative to project root, default: '.')")
-                (:name "exclude_patterns" :type :array :description "List of glob patterns to exclude (e.g., ['.git', '*.fasl'])"))
+                (:name "exclude_patterns" :type :array :items (:type :string) :description "List of glob patterns to exclude (e.g., ['.git', '*.fasl'])"))
               :required '()
               :safety-level :safe
               :categories '(:filesystem :navigation)
@@ -429,7 +429,7 @@
                Examples: '*.lisp' finds all Lisp files, '**/*.md' finds markdown files recursively."
               '((:name "pattern" :type :string :description "Glob pattern (e.g., '*.lisp', '**/*.md')")
                 (:name "path" :type :string :description "Starting directory (relative to project root, default: '.')")
-                (:name "exclude_patterns" :type :array :description "Patterns to exclude (e.g., ['.git', '*.fasl'])"))
+                (:name "exclude_patterns" :type :array :items (:type :string) :description "Patterns to exclude (e.g., ['.git', '*.fasl'])"))
               :required '("pattern")
               :safety-level :safe
               :categories '(:filesystem :search)
