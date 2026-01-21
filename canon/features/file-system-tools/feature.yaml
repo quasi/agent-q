@@ -1,18 +1,18 @@
 feature:
   name: file-system-tools
-  version: 1.1.0
+  version: 1.2.0
   status: stable
-  implementation_status: partial  # 6 of 10 tools implemented
+  implementation_status: complete  # All 10 tools implemented
   confidence: 0.95  # Implemented and tested
   description: |
     File system manipulation tools enabling Agent-Q to navigate directories,
     inspect files, search for files, and make targeted edits within project boundaries.
-    Implements Phase 1 (core navigation), Phase 2 (advanced navigation), and
-    Phase 3 (editing) with comprehensive security validation.
+    Implements all 4 phases: core navigation, advanced navigation, editing, and
+    file lifecycle with comprehensive security validation.
 
-  implemented_contracts: 6
-  planned_contracts: 4
-  test_count: 64
+  implemented_contracts: 10
+  planned_contracts: 0
+  test_count: 111
   test_pass_rate: 100%
 
 depends_on:
@@ -71,23 +71,34 @@ contracts:
     tests: 12
     notes: "Glob-based search with *, **, ? support; 2 helper functions (glob-matches-p, search-recursively)"
 
-  # ═══ PLANNED (Not Implemented) ═══
   - name: insert_at_line
-    status: planned
+    status: stable
+    version: 1.0.0
     safety_level: moderate
-    priority: low
+    impl: "src/tools/filesystem.lisp:827-881"
+    tests: 7
+    notes: "Insert content at specific line numbers (0=beginning, -1=end, 1-indexed)"
   - name: create_file
-    status: planned
-    safety_level: dangerous
-    priority: medium
+    status: stable
+    version: 1.0.0
+    safety_level: moderate
+    impl: "src/tools/filesystem.lisp:600-667"
+    tests: 7
+    notes: "Creates new files with overwrite protection and automatic parent directory creation"
   - name: move_file
-    status: planned
-    safety_level: dangerous
-    priority: low
+    status: stable
+    version: 1.0.0
+    safety_level: moderate
+    impl: "src/tools/filesystem.lisp:669-754"
+    tests: 8
+    notes: "Moves/renames files with buffer synchronization and dual path validation"
   - name: delete_file
-    status: planned
-    safety_level: dangerous
-    priority: low
+    status: stable
+    version: 1.0.0
+    safety_level: moderate
+    impl: "src/tools/filesystem.lisp:756-824"
+    tests: 8
+    notes: "Permanently deletes files with directory rejection and buffer cleanup"
 
 properties:
   - name: path-safety
@@ -113,8 +124,13 @@ scenarios:
     tools: ["directory_tree", "search_files", "edit_file"]
     notes: "Locate relevant files, then apply targeted edits"
   - name: create-new-file
-    status: planned
+    status: covered
     tools: ["create_file"]
+    notes: "Create files with content, automatic parent directories"
+  - name: file-lifecycle-management
+    status: covered
+    tools: ["create_file", "move_file", "delete_file"]
+    notes: "Complete file lifecycle: create, reorganize, cleanup"
 
 implementation_phases:
   phase1_core:
@@ -148,13 +164,15 @@ implementation_phases:
 
   phase4_lifecycle:
     description: "File creation and management"
-    status: planned
+    status: complete
+    completed: "2026-01-21"
     tools:
       - create_file
       - move_file
       - delete_file
       - insert_at_line (moved from phase3)
     priority: medium
+    notes: "All lifecycle tools with :moderate safety level, comprehensive validation"
 
 notes: |
   This feature extends the tool-system with comprehensive filesystem

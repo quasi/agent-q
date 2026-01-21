@@ -7,6 +7,72 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.2.0] - 2026-01-21
+
+### Status
+**Phase 4 Release** - File Lifecycle Complete (All 4 phases complete)
+
+### Added
+- **create_file** tool for creating new files
+  - Parameters: path, content, allow_overwrite, create_parents, description
+  - Prevents accidental overwrites by default
+  - Automatically creates parent directories (configurable)
+  - Safety level: :moderate
+  - Tests: 7 tests (16 checks, 100% pass rate)
+- **move_file** tool for moving/renaming files
+  - Parameters: source, destination, allow_overwrite, create_parents, description
+  - Dual path validation (source and destination)
+  - Automatic Emacs buffer synchronization
+  - Safety level: :moderate
+  - Tests: 8 tests (16 checks, 100% pass rate)
+- **delete_file** tool for permanent file deletion
+  - Parameters: path, description
+  - Rejects directory deletion (files only)
+  - Automatic buffer cleanup on deletion
+  - Safety level: :moderate
+  - Tests: 8 tests (15 checks, 100% pass rate)
+- **insert_at_line** tool for line-based content insertion
+  - Parameters: path, content, line
+  - Line numbering: 0=beginning, -1=end, 1-indexed otherwise
+  - Safety level: :moderate
+  - Tests: 7 tests
+- **Canon Contracts**
+  - create-file.md: Complete contract specification
+  - move-file.md: Complete contract specification
+  - delete-file.md: Complete contract specification
+- **Scenarios**
+  - create-new-file: Create files with content
+  - file-lifecycle-management: Full create/move/delete workflow
+
+### Changed
+- **Feature Status**: partial → complete (all 10 tools implemented)
+- **Test Coverage**: 64 → 111 tests (47 new tests added)
+- **Implemented Contracts**: 6 → 10
+- **Planned Contracts**: 4 → 0
+- **Phase 4 Status**: planned → complete
+
+### Implementation Notes
+- **Test Coverage**: 47 new tests (111 total for feature)
+- **Pass Rate**: 100% (all tests passing)
+- **Code Added**: ~444 LOC (implementation + tests)
+- **Safety Level**: All lifecycle tools use :moderate (not :dangerous)
+  - Overwrite protection requires explicit flags
+  - Project root boundary enforcement on all paths
+  - Comprehensive validation before destructive operations
+
+### Security
+- **Path Validation**: All lifecycle tools validate paths against project root
+- **Overwrite Protection**: create_file and move_file require explicit allow_overwrite flag
+- **Directory Protection**: delete_file explicitly rejects directories
+- **Buffer Synchronization**: All tools integrate with Emacs buffers for consistency
+
+### Documentation
+- Three complete Canon contract documents
+- Updated feature.yaml with complete implementation status
+- Code review completed with production-ready assessment
+
+---
+
 ## [1.1.0] - 2026-01-21
 
 ### Status
