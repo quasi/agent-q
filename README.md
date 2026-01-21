@@ -6,29 +6,23 @@ Agent-Q is an intelligent assistant that integrates with SLY/Emacs to provide co
 
 ## Features
 
-### Phase 1 (Complete) ✅
-- 🧠 **Context-aware assistance** - Accumulate code snippets from your buffers for targeted help
-- 💬 **Conversational interface** - Multi-turn conversations with full history
-- 🔧 **SLY integration** - Seamless integration with your existing Lisp workflow
-- 🎨 **Multiple providers** - Support for Anthropic, OpenAI, Ollama, and OpenRouter
-- ⚡ **Quick actions** - Document functions, explain code, debug errors with a keystroke
-
-### Phase 2 (In Progress) 🔄
-- 🛠️ **Tool system** - Extensible tool registry for agent capabilities
-- 🔍 **Introspection tools** - describe, apropos, documentation, who-calls
-- ⚙️ **Execution tools** - eval, compile, macroexpand in running image
-- 📊 **Diff approval** - Review and approve code changes before application
-
-### Phase 3 (Partial) 🔄
-- 💾 **Session management** - Persistent sessions with SQLite storage
-- 📝 **Rich markdown** - Beautiful rendering with syntax highlighting in chat
-- 🌊 **Streaming responses** - Real-time token-by-token display with progress feedback
-- 🎯 **@-mention completion** - Inline completion for files, symbols, and buffers
-- 📎 **Context pills** - Visual indicators for attached context with hover previews
-- 📋 **Context panel** - Sidebar showing all attached context items
-- 📊 **Observability** - Built-in logging, metrics, and cost tracking
-- 💰 **Cost estimation** - Pre-flight cost checks and budget enforcement
-- ⏳ **Planned**: Condition system integration, test framework integration, knowledge base
+- **Context-aware assistance** - Accumulate code snippets from your buffers for targeted help
+- **Conversational interface** - Multi-turn conversations with full history
+- **SLY integration** - Seamless integration with your existing Lisp workflow
+- **Multiple providers** - Support for Anthropic, OpenAI, Ollama,
+  Gemini, and OpenRouter
+- **Quick actions** - Document functions, explain code, debug errors with a keystroke
+- **Tool system** - Extensible tool registry for agent capabilities
+- **Introspection tools** - describe, apropos, documentation, who-calls
+- **Execution tools** - eval, compile, macroexpand in running image
+- **Diff approval** - Review and approve code changes before application
+- **Session management** - Persistent sessions with SQLite storage
+- **Rich markdown** - Beautiful rendering with syntax highlighting in chat
+- **Streaming responses** - Real-time token-by-token display with progress feedback
+- **@-mention completion** - Inline completion for files, symbols, and buffers
+- **Context pills** - Visual indicators for attached context with hover previews
+- **Observability** - Built-in logging, metrics, and cost tracking
+- **Cost estimation** - Pre-flight cost checks and budget enforcement
 
 ## Prerequisites
 
@@ -446,13 +440,23 @@ agent-q/
 
 ## Contributing
 
+Currently in Alpha stage!
+
+Please test and report
+
+
 Contributions are welcome! Please:
 
-1. Check existing issues or create a new one
-2. Fork the repository
-3. Create a feature branch
-4. Make your changes with tests
-5. Submit a pull request
+1. Dont provide code
+2. Contribute ideas, specifications, details
+
+Claude will write code.
+
+OR fork and be happy! :-D
+
+## Author
+
+quasi / quasiLabs (with the help of Opus - Claude code)
 
 ## License
 
@@ -466,13 +470,10 @@ MIT License - see LICENSE file for details
 
 ## Links
 
-- Documentation: See `specs/` directory
 - Issues: https://github.com/yourusername/agent-q/issues
 - cl-llm-provider: https://github.com/user/cl-llm-provider
 
 ---
-
-**Status**: Phase 1 Complete ✅ | Phase 2 In Progress 🔄 | Phase 3 Partial 🔄
 
 **Recent Additions:**
 - Real-time streaming with incremental token display and header status
