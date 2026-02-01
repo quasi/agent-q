@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Skill(canon-document)",
+      "Bash(ls:*)",
+      "Bash(bd ready)",
+      "Bash(bd list:*)",
+      "Bash(bd create:*)",
+      "Bash(bd update:*)",
+      "Bash(bd close:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(bd sync:*)",
+      "Skill(superpowers:systematic-debugging)",
+      "Bash(grep:*)",
+      "Skill(canon-evolve)"
+    ]
+  }
+}

@@ -103,6 +103,15 @@ cd contrib/sly-agent-q/test && emacs --batch -l run.el
 
 ---
 
-## Task Tracking
+## Issue Tracking
 
-Use `bd` for issue tracking (beads workflow).
+This project uses **bd (beads)** for issue tracking.
+Run `bd prime` for workflow context, or install hooks (`bd hooks install`) for auto-injection.
+
+**Quick reference:**
+- `bd ready` - Find unblocked work
+- `bd create "Title" --type task --priority 2` - Create issue
+- `bd close <id>` - Complete work
+- `bd sync` - Sync with git (run at session end)
+
+For full workflow details: `bd prime`
