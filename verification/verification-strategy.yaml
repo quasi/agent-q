@@ -1,0 +1,152 @@
+# Agent-Q Verification Strategy
+# Defines how contracts and scenarios are verified
+# Last Updated: 2026-02-03
+
+version: "1.0.0"
+
+# Test infrastructure locations
+test_suites:
+  elisp:
+    path: "contrib/sly-agent-q/test/"
+    framework: "ert"
+    runner: "emacs --batch -l run.el"
+    coverage: "excellent"
+    test_count: 165
+
+  common_lisp:
+    path: "tests/"
+    framework: "fiveam"
+    runner: "(asdf:test-system :agent-q)"
+    coverage: "good"
+    test_count: 64
+
+# Verification methods by feature
+features:
+  context-management:
+    verification_type: "automated"
+    primary_suite: "elisp"
+    test_patterns:
+      - "test/sly-agent-q-context-tests.el"
+    coverage_notes: "99 tests covering pills, completion, panel"
+
+  tool-system:
+    verification_type: "integration"
+    primary_suite: "common_lisp"
+    test_patterns:
+      - "tests/filesystem-tests.lisp"
+    coverage_notes: "File system tools tested; other tools via integration"
+    gaps:
+      - "No unit tests for introspection tools"
+      - "Tool registry not directly tested"
+
+  diff-approval:
+    verification_type: "automated"
+    primary_suite: "elisp"
+    test_patterns:
+      - "test/sly-agent-q-diff-tests.el"
+    coverage_notes: "Hunk state machine fully tested"
+
+  session-management:
+    verification_type: "automated"
+    primary_suite: "elisp"
+    test_patterns:
+      - "test/sly-agent-q-sessions-tests.el"
+    coverage_notes: "20 tests for persistence, serialization, CRUD"
+
+  chat-interface:
+    verification_type: "automated"
+    primary_suite: "elisp"
+    test_patterns:
+      - "test/sly-agent-q-chat-tests.el"
+    coverage_notes: "36 tests for dual-region, streaming, rendering"
+
+  file-system-tools:
+    verification_type: "automated"
+    primary_suite: "common_lisp"
+    test_patterns:
+      - "tests/filesystem-tests.lisp"
+    coverage_notes: "64 tests with 100% pass rate"
+
+  context-completion:
+    verification_type: "automated"
+    primary_suite: "elisp"
+    test_patterns:
+      - "test/sly-agent-q-context-tests.el"
+    coverage_notes: "Most comprehensive - 60% of test suite"
+
+# Integration points that cannot be mocked
+integration_points:
+  - name: "LLM Provider"
+    type: "external_api"
+    mocking_strategy: "stub responses in tests"
+    real_verification: "manual smoke tests"
+
+  - name: "SLY/Swank Connection"
+    type: "rpc"
+    mocking_strategy: "mock slynk functions"
+    real_verification: "integration tests with running Lisp"
+
+  - name: "Emacs Display"
+    type: "ui"
+    mocking_strategy: "buffer content assertions"
+    real_verification: "manual visual inspection"
+
+# Smoke test endpoints (for live verification)
+smoke_tests:
+  - name: "Lisp connection"
+    command: "(agent-q:ping)"
+    expected: "pong"
+
+  - name: "Tool registry loaded"
+    command: "(length (agent-q:list-tools))"
+    expected: ">= 18"
+
+  - name: "Session creation"
+    command: "(agent-q:create-session)"
+    expected: "session-* pattern"
+
+# Known verification gaps
+gaps:
+  - id: "GAP-001"
+    description: "No Common Lisp unit tests for core orchestration"
+    severity: "medium"
+    mitigation: "Elisp integration tests cover via RPC"
+
+  - id: "GAP-002"
+    description: "LLM responses not tested end-to-end"
+    severity: "low"
+    mitigation: "Manual testing during development"
+
+  - id: "GAP-003"
+    description: "Cost estimation accuracy not verified"
+    severity: "low"
+    mitigation: "Fail-open design prevents blocking"
+
+# Verification configuration (required by Canon)
+verification:
+  mode: "automated"  # automated | manual | hybrid
+  ci_integration: false  # No CI yet
+  coverage_threshold: 80  # Target coverage percentage
+
+  # What to verify
+  targets:
+    contracts: true
+    scenarios: true
+    properties: true
+
+  # When verification runs
+  triggers:
+    - "pre-commit"
+    - "manual"
+
+# Quality gates
+quality_gates:
+  pre_commit:
+    - "All Elisp tests pass (165/165)"
+    - "All CL tests pass (64/64)"
+    - "No new linter warnings"
+
+  pre_release:
+    - "Manual smoke test on fresh Emacs"
+    - "Session persistence verified"
+    - "LLM round-trip confirmed"

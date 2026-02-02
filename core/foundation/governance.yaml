@@ -1,0 +1,79 @@
+# Agent-Q Governance Principles
+# Defines the guardrails and constraints that govern Agent-Q behavior
+# Last Updated: 2026-02-03
+
+principles:
+  - id: USER_CONTROL
+    name: User Remains in Control
+    description: >
+      The user must always have final authority over code modifications.
+      Agent-Q assists but never acts autonomously on destructive operations.
+    guardrails:
+      - All file modifications require explicit user approval via diff review
+      - Dangerous tools (safety-level :dangerous) always prompt for confirmation
+      - User can reject any or all proposed changes at any time
+      - No silent modifications to user code
+
+  - id: TRANSPARENCY
+    name: Transparent Operation
+    description: >
+      All Agent-Q actions and reasoning should be visible and understandable.
+      Users should never be surprised by what the agent did.
+    guardrails:
+      - Tool executions are logged and visible in the chat
+      - Cost estimates shown before expensive LLM calls
+      - Streaming responses show work-in-progress
+      - Session history is persistent and searchable
+
+  - id: SAFE_DEFAULTS
+    name: Safe by Default
+    description: >
+      Default configurations prioritize safety over convenience.
+      Risky operations require explicit opt-in.
+    guardrails:
+      - Introspection tools (:safe) auto-execute; modification tools require approval
+      - File operations constrained to project root boundary
+      - Budget limits prevent runaway API costs (default $0.10/request)
+      - Fail-open on cost estimation, but with warning
+
+  - id: LISP_IMAGE_SAFETY
+    name: Protect the Running Image
+    description: >
+      Code execution happens in the user's Lisp image. Avoid operations
+      that could crash, corrupt state, or cause data loss.
+    guardrails:
+      - Tool handlers catch and contain errors (no unhandled propagation)
+      - No automatic package modifications without approval
+      - REPL history preserved across sessions
+      - Sessions auto-save to prevent work loss
+
+  - id: EMACS_INTEGRATION
+    name: Respect Emacs Conventions
+    description: >
+      Agent-Q operates as a well-behaved Emacs citizen, following
+      established patterns and not conflicting with user workflows.
+    guardrails:
+      - Uses recursive-edit for blocking operations (not busy-wait)
+      - Respects buffer-local variables and mode conventions
+      - Integrates with SLY, not replacing it
+      - Keybindings under C-c C-q prefix (reserved for minor modes)
+
+  - id: CONTEXT_EFFICIENCY
+    name: Efficient Context Usage
+    description: >
+      LLM context is expensive. Agent-Q should use it wisely,
+      including only relevant information and respecting limits.
+    guardrails:
+      - Sliding window (50 items) prevents unbounded context growth
+      - File attachments capped at 50KB
+      - Context items include metadata for filtering
+      - FIFO eviction for overflow (oldest first)
+
+# Governance metadata
+metadata:
+  version: "1.0.0"
+  derived_from:
+    - "core/foundation/vocabulary.md"
+    - "core/decisions/*.md"
+  enforcement: "manual"  # No automated enforcement yet
+  review_frequency: "quarterly"
