@@ -3,6 +3,19 @@
 # Method: Multi-source triangulation (7-pass extraction)
 # Source: .canon-initiation/pass6-triangulation-report.md
 
+# ═══════════════════════════════════════════════════════════════
+# CANON ROOT (required by CCC evaluator)
+# ═══════════════════════════════════════════════════════════════
+
+canon:
+  project: "agent-q"
+  version: "0.5.0"
+  description: "AI-powered agentic extension for Common Lisp development"
+
+# ═══════════════════════════════════════════════════════════════
+# EXTENDED METADATA
+# ═══════════════════════════════════════════════════════════════
+
 metadata:
   name: "Agent-Q"
   version: "0.5.0"
@@ -60,18 +73,6 @@ features:
       - "src/context.lisp"
       - "specs/PHASE-1-SPEC.md"
     tests: 20
-
-  - name: "conversation"
-    path: "features/conversation/"
-    phase: 1
-    status: complete
-    confidence: 0.90
-    triangulation: convergent
-    description: "Multi-turn conversation with message history"
-    key_files:
-      - "src/conversation.lisp"
-      - "specs/PHASE-1-SPEC.md"
-    tests: "partial (integration only)"
 
   - name: "session-management"
     path: "features/session-management/"
@@ -151,44 +152,6 @@ features:
       - "docs/guides/context-management.md"
     tests: 99
     notes: "Most comprehensively tested feature (60% of test suite)"
-
-  # Recent Additions (Code-only, need specs)
-  - name: "streaming"
-    path: "features/streaming/"
-    phase: 3
-    status: complete
-    confidence: 0.75
-    triangulation: code_only
-    description: "Real-time token-by-token response display"
-    key_files:
-      - "src/streaming.lisp"
-      - "specs/plans/2026-01-13-streaming-observability-upgrade.md"
-    tests: "partial"
-    needs_spec: true
-
-  - name: "observability"
-    path: "features/observability/"
-    phase: 3
-    status: complete
-    confidence: 0.70
-    triangulation: code_only
-    description: "Logging hooks and metrics collection"
-    key_files:
-      - "src/observability.lisp"
-    tests: 0
-    needs_spec: true
-
-  - name: "cost-estimation"
-    path: "features/cost-estimation/"
-    phase: 3
-    status: complete
-    confidence: 0.75
-    triangulation: code_only
-    description: "Pre-flight cost checks and budget enforcement"
-    key_files:
-      - "src/cost.lisp"
-    tests: 0
-    needs_spec: true
 
 # ═══════════════════════════════════════════════════════════════
 # CORE VOCABULARY
