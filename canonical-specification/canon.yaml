@@ -21,7 +21,7 @@ metadata:
   version: "0.5.0"
   description: "AI-powered agentic extension for Common Lisp development"
   canonical_source: "Extracted from existing codebase via triangulation"
-  last_updated: "2026-01-21"
+  last_updated: "2026-02-04"
 
   initiation:
     method: "canon-initiate (triangulation v0.2.0)"
@@ -122,7 +122,7 @@ features:
     depends_on:
       - "tool-system"
       - "diff-approval"
-    research: "canon/research/2026-01-20-file-system-tools.research.md"
+    research: "# removed — research file archived during restructuring"
     notes: |
       Phase 1 (core navigation), Phase 2 (advanced navigation), and Phase 3 (editing) complete.
       Implemented tools: list_directory, get_file_info, get_project_root, directory_tree, search_files, edit_file
@@ -158,8 +158,8 @@ features:
 # ═══════════════════════════════════════════════════════════════
 
 vocabulary:
-  count: 17
-  convergent: 15
+  count: 31
+  convergent: 29
   code_only: 2
   source: "core/foundation/vocabulary.md"
 

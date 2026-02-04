@@ -27,7 +27,7 @@ Think of it as "executable documentation" - precise enough for LLMs to implement
 
 ### For Humans
 
-1. **Start with vocabulary**: `core/foundation/vocabulary.md` (17 domain terms)
+1. **Start with vocabulary**: `core/foundation/vocabulary.md` (31 domain terms)
 2. **Explore features**: `features/` (11 features documented)
 3. **Understand decisions**: `core/decisions/` (6 ADRs)
 4. **Check the manifest**: `canon.yaml` (overview + confidence scores)
@@ -44,14 +44,14 @@ Think of it as "executable documentation" - precise enough for LLMs to implement
 ## Structure
 
 ```
-canon/
+canonical-specification/
 ├── canon.yaml                  # Manifest (features, metadata, quality)
 ├── README-CANON.md             # This file
 ├── .canon-meta.yaml            # Infrastructure tracking
 │
 ├── core/
 │   ├── foundation/
-│   │   └── vocabulary.md       # 17 domain terms
+│   │   └── vocabulary.md       # 31 domain terms
 │   └── decisions/              # 6 Architectural Decision Records
 │       ├── 0001-session-conversation-unification.md
 │       ├── 0002-streaming-tool-fallback.md
@@ -202,7 +202,7 @@ Run `/canon-check` periodically to:
 - Detect stale artifacts
 - Generate fix plans
 
-**Last check:** 2026-01-21T14:16:14Z
+**Last check:** 2026-02-04
 
 ---
 

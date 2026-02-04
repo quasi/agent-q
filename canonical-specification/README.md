@@ -36,12 +36,12 @@ The Canon was extracted through 7 systematic passes:
 ## Structure
 
 ```
-canon/
+canonical-specification/
 ├── canon.yaml                          # Manifest with confidence scores
 ├── README.md                           # This file
 ├── core/
 │   ├── foundation/
-│   │   └── vocabulary.md               # 17 domain terms (complete)
+│   │   └── vocabulary.md               # 31 domain terms (complete)
 │   └── decisions/
 │       └── 0001-session-conversation-unification.md  # First ADR (complete)
 └── features/
@@ -57,7 +57,7 @@ canon/
 
 ### ✅ Core Foundation
 - **canon.yaml** - Manifest listing all 11 features with confidence scores
-- **vocabulary.md** - Complete glossary of 17 terms (agents, context, messages, sessions, tools, diff, streaming, cost)
+- **vocabulary.md** - Complete glossary of 31 terms (agents, context, messages, sessions, tools, diff, streaming, cost)
 
 ### ✅ Design Decisions
 - **ADR-0001** - Session-Conversation Unification (recovered from git commit 555703e8)
@@ -320,5 +320,5 @@ The Canon itself is documentation of the codebase and inherits the same license.
 ---
 
 **Canon Status:** 🟢 **Active** (initialized and ready for ongoing development)
-**Last Updated:** 2026-01-17
+**Last Updated:** 2026-02-04
 **Next Review:** When Phase 4 features begin development

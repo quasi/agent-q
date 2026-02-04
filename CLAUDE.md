@@ -8,26 +8,26 @@
 
 ## Canon-Driven Development
 
-This project uses a **Canon** specification system. The Canon (`canon/`) is the authoritative source of truth for architecture, contracts, vocabulary, and design decisions.
+This project uses a **Canon** specification system. The Canon (`canonical-specification/`) is the authoritative source of truth for architecture, contracts, vocabulary, and design decisions.
 
 ### Before Working on Anything
 
 ```
-1. Read canon/core/foundation/vocabulary.md   → Domain terms
-2. Check canon/canon.yaml                     → Feature overview + confidence
-3. Find your feature in canon/features/       → Contracts, properties, scenarios
-4. Check canon/core/decisions/*.md            → Architectural rationale
+1. Read canonical-specification/core/foundation/vocabulary.md   → Domain terms
+2. Check canonical-specification/canon.yaml                     → Feature overview + confidence
+3. Find your feature in canonical-specification/features/       → Contracts, properties, scenarios
+4. Check canonical-specification/core/decisions/*.md            → Architectural rationale
 ```
 
 ### Canon Structure
 
 ```
-canon/
+canonical-specification/
 ├── canon.yaml              # Manifest with all features + confidence scores
 ├── README.md               # How to read/use the Canon
 ├── core/
 │   ├── foundation/
-│   │   └── vocabulary.md   # 17 domain terms (agents, context, tools, etc.)
+│   │   └── vocabulary.md   # 31 domain terms (agents, context, tools, etc.)
 │   └── decisions/          # ADRs (6 documented design decisions)
 └── features/               # Feature specifications
     ├── context-management/ # Context accumulation, 50-item window
@@ -42,7 +42,7 @@ canon/
 
 ### When Modifying Code
 
-1. Find affected features in `canon/features/`
+1. Find affected features in `canonical-specification/features/`
 2. Read `contracts/` for API expectations
 3. Check `properties/` for invariants to maintain
 4. Update Canon after changes (use `canon-evolve` skill)

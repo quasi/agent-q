@@ -2,7 +2,7 @@
 
 **Project**: Agent-Q
 **Canon Version**: 0.5.0
-**Last Updated**: 2026-01-22
+**Last Updated**: 2026-02-04
 
 ## Quick Navigation
 
@@ -25,7 +25,7 @@ This Canon is the **formal specification** of Agent-Q, extracted from the existi
 ## Structure
 
 ```
-canon/
+canonical-specification/
 ├── canon.yaml                          # Manifest with confidence scores
 ├── INDEX.md                            # This file
 ├── core/
@@ -101,11 +101,11 @@ Not yet implemented. See `canon.yaml` for planned features.
 
 ## Core Foundation
 
-### Vocabulary (17 Terms)
+### Vocabulary (31 Terms)
 
 **File**: `core/foundation/vocabulary.md`
-**Confidence**: 0.92
-**Convergence**: 88% (15/17 terms documented + verified by code)
+**Confidence**: 0.95
+**Convergence**: 94% (29/31 terms documented + verified by code)
 
 **Key Terms**:
 - Agent, Context Item, Context Manager, Message, Conversation
@@ -282,7 +282,7 @@ Not yet implemented. See `canon.yaml` for planned features.
 - **Specs** (legacy): `specs/PHASE-*.md` (formal specifications, pre-Canon)
 - **Plans**: `docs/plans/*.md` (implementation plans)
 - **User Docs**: `docs/` (human-friendly guides)
-- **Agent Instructions**: `/AGENT.md` (root level - contributor guide)
+- **Agent Instructions**: `CANON.md` (root level - contributor guide)
 
 ---
 

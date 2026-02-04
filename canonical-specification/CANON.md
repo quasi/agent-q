@@ -110,7 +110,7 @@ emacs --batch -f batch-byte-compile contrib/sly-agent-q/*.el
 (defvar *current-conversation* nil)
 ```
 
-**Rationale:** See `canon/core/decisions/0001-session-conversation-unification.md`. This prevents message persistence bugs where session and conversation get out of sync.
+**Rationale:** See `canonical-specification/core/decisions/0001-session-conversation-unification.md`. This prevents message persistence bugs where session and conversation get out of sync.
 
 ---
 
@@ -135,7 +135,7 @@ emacs --batch -f batch-byte-compile contrib/sly-agent-q/*.el
 (stream-tool-execution tool-call) ; Too complex, unreliable
 ```
 
-**Rationale:** See `canon/core/decisions/0002-streaming-tool-fallback.md`. Tool calls are state-changing and require reliable execution order.
+**Rationale:** See `canonical-specification/core/decisions/0002-streaming-tool-fallback.md`. Tool calls are state-changing and require reliable execution order.
 
 ---
 
@@ -147,7 +147,7 @@ emacs --batch -f batch-byte-compile contrib/sly-agent-q/*.el
 - Elisp: 165 tests, 100% passing (ERT framework)
 - Common Lisp: 64 filesystem tests only
 
-**Rationale:** See `canon/core/decisions/0003-elisp-first-testing.md`. UI behavior is testable in Elisp; CL business logic is verified via integration testing.
+**Rationale:** See `canonical-specification/core/decisions/0003-elisp-first-testing.md`. UI behavior is testable in Elisp; CL business logic is verified via integration testing.
 
 ---
 
@@ -171,7 +171,7 @@ emacs --batch -f batch-byte-compile contrib/sly-agent-q/*.el
   (error "Cannot proceed without cost estimate"))
 ```
 
-**Rationale:** See `canon/core/decisions/0004-fail-open-cost-estimation.md`. Availability > perfect cost tracking.
+**Rationale:** See `canonical-specification/core/decisions/0004-fail-open-cost-estimation.md`. Availability > perfect cost tracking.
 
 ---
 
@@ -184,7 +184,7 @@ emacs --batch -f batch-byte-compile contrib/sly-agent-q/*.el
 **Phase 3:** Sessions + streaming + completion
 **Phase 4:** Advanced features (semantic search, profiling)
 
-**Rationale:** See `canon/core/decisions/0005-phased-chat-development.md`.
+**Rationale:** See `canonical-specification/core/decisions/0005-phased-chat-development.md`.
 
 ---
 
@@ -194,7 +194,7 @@ emacs --batch -f batch-byte-compile contrib/sly-agent-q/*.el
 
 **Example:** `file-system-tools` is stable with 6/10 contracts implemented. Remaining 4 are planned but not blocking.
 
-**Rationale:** See `canon/core/decisions/0006-partial-feature-stabilization.md`. Allows production use of working subset.
+**Rationale:** See `canonical-specification/core/decisions/0006-partial-feature-stabilization.md`. Allows production use of working subset.
 
 ## File Locations
 
@@ -205,10 +205,10 @@ emacs --batch -f batch-byte-compile contrib/sly-agent-q/*.el
 | Emacs extension | `contrib/sly-agent-q/` |
 | Tests (Elisp) | `contrib/sly-agent-q/test/` |
 | Tests (CL, planned) | `tests/` |
-| Specifications | `canon/` |
+| Specifications | `canonical-specification/` |
 | Plans | `docs/plans/` |
 | User documentation | `docs/` |
-| Design decisions | `canon/core/decisions/` |
+| Design decisions | `canonical-specification/core/decisions/` |
 
 ## Invariants
 
@@ -379,7 +379,7 @@ emacs --batch -f batch-byte-compile contrib/sly-agent-q/*.el
 
 ## Navigation
 
-For detailed Canon navigation and feature specifications, see `canon/INDEX.md`.
+For detailed Canon navigation and feature specifications, see `canonical-specification/INDEX.md`.
 
 ## Dependencies
 
@@ -425,9 +425,9 @@ session-management ← conversation ← context-management
 
 ## Quick Start for Contributors
 
-1. **Read vocabulary**: `canon/core/foundation/vocabulary.md` (17 terms, 15 minutes)
-2. **Understand architecture**: `canon/core/decisions/*.md` (6 ADRs, 30 minutes)
-3. **Find a feature**: `canon/features/` (browse by confidence score)
+1. **Read vocabulary**: `canonical-specification/core/foundation/vocabulary.md` (31 terms, 15 minutes)
+2. **Understand architecture**: `canonical-specification/core/decisions/*.md` (6 ADRs, 30 minutes)
+3. **Find a feature**: `canonical-specification/features/` (browse by confidence score)
 4. **Check tests**: Run Elisp suite to verify environment
 5. **Make changes**: Follow patterns above, update Canon with `canon-evolve`
 
@@ -455,11 +455,11 @@ git commit -m "feat: your change"
 ## Communication Channels
 
 - **Issues**: GitHub issue tracker
-- **Specs**: `canon/` directory (single source of truth)
-- **Rationale**: `canon/core/decisions/` (ADRs)
+- **Specs**: `canonical-specification/` directory (single source of truth)
+- **Rationale**: `canonical-specification/core/decisions/` (ADRs)
 
 ---
 
-**Last Updated:** 2026-01-22
+**Last Updated:** 2026-02-04
 **Canon Version:** 0.5.0
 **Status:** Active development (Phase 3 stable, Phase 4 planned)
